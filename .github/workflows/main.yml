@@ -1,0 +1,86 @@
+name: Build Android APK (Expiry Guard)
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Prepare Web Files and Config
+        run: |
+          mkdir -p build_app/www
+          HTML_FILE=$(find . -maxdepth 4 \( -name "index.html" -o -name "*ExpiryGuard*.html" -o -name "*expiry_guard*.html" \) | head -n 1)
+          if [ -n "$HTML_FILE" ]; then
+            cp "$HTML_FILE" build_app/www/index.html
+          else
+            echo "HTML file not found!"
+            exit 1
+          fi
+          cd build_app
+          echo '{"name":"expiry-guard","version":"3.0.0","dependencies":{"@capacitor/android":"^6.0.0","@capacitor/core":"^6.0.0"},"devDependencies":{"@capacitor/cli":"^6.0.0"}}' > package.json
+          echo '{"appId":"md.linella.expiryguard","appName":"Expiry Guard","webDir":"www","bundledWebRuntime":false,"server":{"androidScheme":"https"}}' > capacitor.config.json
+
+      - name: Install Capacitor and Generate Android Project
+        working-directory: ./build_app
+        run: |
+          npm install
+          npx cap add android
+          npx cap sync android
+
+      - name: Add Camera and Vibration Permissions
+        working-directory: ./build_app
+        run: |
+          MANIFEST="android/app/src/main/AndroidManifest.xml"
+          sed -i 's|<application|<uses-permission android:name="android.permission.CAMERA" />\n    <uses-permission android:name="android.permission.VIBRATE" />\n    <uses-permission android:name="android.permission.RECORD_AUDIO" />\n    <uses-feature android:name="android.hardware.camera" android:required="false" />\n    <application android:usesCleartextTraffic="true"|' "$MANIFEST"
+          MAIN_ACT=$(find android/app/src/main/java -name "MainActivity.java" | head -n 1)
+          cat << 'JAVA' > "$MAIN_ACT"
+          package md.linella.expiryguard;
+          import android.Manifest;
+          import android.content.pm.PackageManager;
+          import android.os.Bundle;
+          import androidx.core.app.ActivityCompat;
+          import androidx.core.content.ContextCompat;
+          import com.getcapacitor.BridgeActivity;
+          public class MainActivity extends BridgeActivity {
+              @Override
+              public void onCreate(Bundle savedInstanceState) {
+                  super.onCreate(savedInstanceState);
+                  if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+                      ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO}, 101);
+                  }
+              }
+          }
+          JAVA
+
+      - name: Build APK with Gradle
+        working-directory: ./build_app/android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug
+          cp app/build/outputs/apk/debug/app-debug.apk ../../ExpiryGuard.apk
+
+      - name: Upload APK to Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ExpiryGuard-Android-APK
+          path: ExpiryGuard.apk
