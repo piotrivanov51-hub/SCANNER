@@ -1,0 +1,2494 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#065f46">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Expiry Guard">
+  <link id="pwaManifestLink" rel="manifest" href="data:application/manifest+json,{}" />
+  <title>Expiry Guard — Честный AI Сканер (Gemini Vision)</title>
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+    @keyframes pulse-border {
+      0% { border-color: rgba(16, 185, 129, 0.4); }
+      50% { border-color: rgba(16, 185, 129, 1); }
+      100% { border-color: rgba(16, 185, 129, 0.4); }
+    }
+    .scanner-target {
+      animation: pulse-border 2s infinite ease-in-out;
+    }
+    .custom-scroll::-webkit-scrollbar {
+      display: none;
+    }
+    @media print {
+      body * {
+        visibility: hidden;
+      }
+      #printableStickerArea, #printableStickerArea * {
+        visibility: visible;
+      }
+      #printableStickerArea {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+        background: white !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        box-shadow: none !important;
+      }
+      .no-print {
+        display: none !important;
+      }
+      * {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+      }
+    }
+  </style>
+</head>
+<body class="bg-slate-100 text-slate-800 font-sans min-h-screen flex flex-col antialiased select-none pb-20">
+
+  <!-- Шапка приложения -->
+  <header class="bg-emerald-800 text-white px-4 py-3 shadow-md sticky top-0 z-30 flex items-center justify-between">
+    <div class="flex items-center space-x-2">
+      <div class="bg-emerald-600 p-1.5 rounded-lg">
+        <i data-lucide="sparkles" class="w-5 h-5 text-amber-300"></i>
+      </div>
+      <div>
+        <h1 class="font-bold text-base leading-tight flex items-center gap-1.5">
+          <span>Expiry Guard</span>
+          <span class="bg-amber-400 text-slate-900 text-[10px] font-extrabold px-1.5 py-0.2 rounded">GEMINI 1.5</span>
+        </h1>
+        <p class="text-[11px] text-emerald-200">Реальное зрение • Без шаблонов и заглушек</p>
+      </div>
+    </div>
+    <div class="flex items-center space-x-2">
+      <button id="openInstallModalBtn" class="bg-amber-400 hover:bg-amber-300 text-slate-950 px-2.5 py-1.5 rounded-lg text-xs font-extrabold flex items-center gap-1 shadow-sm transition" title="Установить приложение на телефон Android">
+        <i data-lucide="smartphone" class="w-4 h-4"></i>
+        <span>В телефон</span>
+      </button>
+      <button id="apiKeySettingsBtn" class="bg-emerald-700 hover:bg-emerald-600 p-2 rounded-lg text-emerald-100 text-xs flex items-center gap-1 transition" title="Настройки API Gemini">
+        <i data-lucide="key" class="w-4 h-4 text-amber-300"></i>
+        <span id="keyStatusLabel" class="hidden sm:inline">Ключ AI</span>
+      </button>
+      <button id="shareReportBtn" class="bg-emerald-600 hover:bg-emerald-500 px-2.5 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1 shadow-sm transition">
+        <i data-lucide="share-2" class="w-4 h-4"></i>
+        <span>Отчет</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Всплывающий тост-уведомление -->
+  <div id="toastNotification" class="fixed top-16 inset-x-4 max-w-sm mx-auto z-50 bg-slate-900/95 text-white px-4 py-3 rounded-xl shadow-xl flex items-center justify-between text-xs transition-all duration-300 transform -translate-y-10 opacity-0 pointer-events-none">
+    <div class="flex items-center space-x-2">
+      <i id="toastIcon" data-lucide="info" class="w-4 h-4 text-emerald-400 shrink-0"></i>
+      <span id="toastMessage" class="break-words">Сообщение</span>
+    </div>
+  </div>
+
+  <!-- Индикатор обработки Gemini AI с отображением этапа -->
+  <div id="loadingOverlay" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex flex-col items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-2xl p-6 flex flex-col items-center space-y-3 max-w-xs text-center shadow-2xl">
+      <div class="relative w-12 h-12 flex items-center justify-center">
+        <div class="absolute inset-0 border-4 border-amber-400 border-t-transparent rounded-full animate-spin"></div>
+        <i data-lucide="sparkles" class="w-6 h-6 text-amber-500"></i>
+      </div>
+      <h4 class="font-bold text-sm text-slate-800">Анализ кадра через Gemini AI...</h4>
+      <p id="loadingStatusText" class="text-xs text-slate-500">Передаю фото этикетки в нейросеть</p>
+    </div>
+  </div>
+
+  <!-- Модальное окно ошибки API с подробностями -->
+  <div id="errorModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-white w-full max-w-sm rounded-2xl p-5 shadow-2xl space-y-3">
+      <div class="flex items-center justify-between border-b pb-2">
+        <h3 class="font-bold text-sm text-rose-600 flex items-center gap-1.5">
+          <i data-lucide="alert-circle" class="w-5 h-5"></i>
+          <span>Ошибка запроса к Gemini</span>
+        </h3>
+        <button id="closeErrorModalBtn" class="text-slate-400 hover:text-slate-600">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+      <p class="text-xs text-slate-600">Запрос к Gemini API не прошел. Никаких вымышленных товаров не подставлено.</p>
+      <div class="bg-rose-50 border border-rose-200 p-2.5 rounded-xl text-rose-900 text-xs font-mono break-all max-h-36 overflow-y-auto" id="errorDetailsText">
+        Ошибка сети или неверный API-ключ.
+      </div>
+      <button id="fixKeyBtn" class="w-full bg-emerald-700 text-white py-2 rounded-xl text-xs font-bold hover:bg-emerald-800 transition">
+        Проверить / ввести ключ API
+      </button>
+    </div>
+  </div>
+
+  <!-- Диалог подтверждения очистки -->
+  <div id="confirmClearModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-white w-full max-w-xs rounded-2xl p-5 shadow-2xl space-y-3">
+      <h3 class="font-bold text-sm text-slate-800">Очистить список?</h3>
+      <p class="text-xs text-slate-600">Удалить из журнала все обработанные товары?</p>
+      <div class="flex space-x-2 pt-2">
+        <button id="cancelClearBtn" class="flex-1 bg-slate-100 text-slate-700 py-2 rounded-xl text-xs font-medium hover:bg-slate-200">Отмена</button>
+        <button id="executeClearBtn" class="flex-1 bg-rose-600 text-white py-2 rounded-xl text-xs font-bold hover:bg-rose-700">Очистить</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Модальное окно установки на Android и раздачи на другие телефоны -->
+  <div id="installAndroidModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-white w-full max-w-sm rounded-2xl p-5 shadow-2xl space-y-3.5 max-h-[90vh] overflow-y-auto">
+      <div class="flex items-center justify-between border-b pb-2">
+        <h3 class="font-bold text-sm text-slate-800 flex items-center gap-1.5">
+          <i data-lucide="smartphone" class="w-4 h-4 text-emerald-600"></i>
+          <span>Установка на Android (все телефоны)</span>
+        </h3>
+        <button id="closeInstallModalBtn" class="text-slate-400 hover:text-slate-600">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <!-- Способ 1: Прямое скачивание автономного файла для пересылки в WhatsApp / Telegram -->
+      <div class="bg-emerald-50 border border-emerald-200 rounded-xl p-3 space-y-2">
+        <div class="flex items-center gap-1.5 text-emerald-900 font-bold text-xs">
+          <span class="bg-emerald-600 text-white w-4 h-4 rounded-full flex items-center justify-center text-[10px]">1</span>
+          <span>Раздать кассирам через WhatsApp / Telegram</span>
+        </div>
+        <p class="text-[11px] text-slate-600 leading-relaxed">
+          Скачайте автономный файл приложения и отправьте его в рабочий чат магазина. На любом Android-телефоне достаточно нажать на файл → открыть в <strong>Chrome</strong>.
+        </p>
+        <button id="downloadStandaloneHtmlBtn" type="button" class="w-full bg-emerald-700 hover:bg-emerald-800 text-white py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-sm transition">
+          <i data-lucide="download" class="w-4 h-4"></i>
+          <span>СКАЧАТЬ ФАЙЛ EXPIRY_GUARD.HTML</span>
+        </button>
+      </div>
+
+      <!-- Способ 2: Установка иконки на главный экран Android (PWA) -->
+      <div class="bg-amber-50 border border-amber-200 rounded-xl p-3 space-y-2">
+        <div class="flex items-center gap-1.5 text-amber-950 font-bold text-xs">
+          <span class="bg-amber-500 text-white w-4 h-4 rounded-full flex items-center justify-center text-[10px]">2</span>
+          <span>Иконка на главный экран (без браузера)</span>
+        </div>
+        <p class="text-[11px] text-slate-600 leading-relaxed">
+          В браузере <strong>Chrome на Android</strong> нажмите меню <strong>⋮</strong> (три точки вверху справа) → выберите <strong>«Добавить на главный экран»</strong> или <strong>«Установить приложение»</strong>.
+        </p>
+        <button id="triggerNativePwaInstallBtn" type="button" class="w-full bg-amber-400 hover:bg-amber-500 text-slate-950 py-2 px-3 rounded-xl text-xs font-extrabold flex items-center justify-center gap-1.5 shadow-sm transition">
+          <i data-lucide="plus-square" class="w-4 h-4"></i>
+          <span>УСТАНОВИТЬ НА ГЛАВНЫЙ ЭКРАН</span>
+        </button>
+      </div>
+
+      <!-- Способ 3: Сборка .APK файла в 1 клик -->
+      <div class="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-1.5 text-[11px] text-slate-600">
+        <div class="font-bold text-slate-800 flex items-center gap-1.5 text-xs">
+          <span class="bg-slate-800 text-white w-4 h-4 rounded-full flex items-center justify-center text-[10px]">3</span>
+          <span>Как получить установочный .APK за 30 секунд:</span>
+        </div>
+        <ol class="list-decimal list-inside space-y-1">
+          <li>Распакуйте архив <strong>Expiry_Guard_Android_Installer.zip</strong>.</li>
+          <li>Перетащите папку <strong>1_PWA_Ready</strong> на бесплатный сайт <strong>app.netlify.com/drop</strong> (даже с телефона) — вы получите ссылку.</li>
+          <li>Вставьте эту ссылку на <strong>pwabuilder.com</strong> → нажмите <strong>Package for stores → Android → Download APK</strong>. Готовый <code>ExpiryGuard.apk</code> можно ставить на любые телефоны!</li>
+        </ol>
+      </div>
+
+      <button id="okInstallModalBtn" type="button" class="w-full bg-slate-800 text-white py-2 rounded-xl text-xs font-bold hover:bg-slate-700 transition">
+        Понятно
+      </button>
+    </div>
+  </div>
+
+  <!-- Модальное окно настройки API-ключа Gemini -->
+  <div id="apiKeyModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-white w-full max-w-sm rounded-2xl p-5 shadow-2xl space-y-3">
+      <div class="flex items-center justify-between border-b pb-2">
+        <h3 class="font-bold text-sm text-slate-800 flex items-center gap-1.5">
+          <i data-lucide="key" class="w-4 h-4 text-amber-500"></i>
+          <span>Ключ Google Gemini Vision API</span>
+        </h3>
+        <button id="closeApiKeyModalBtn" class="text-slate-400 hover:text-slate-600">
+          <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
+      </div>
+      <div class="text-xs text-slate-600 space-y-2">
+        <p>Вставьте ключ Gemini API (начинается на <code class="bg-slate-100 px-1 py-0.5 rounded font-mono">AIzaSy...</code>):</p>
+        <input id="apiKeyInput" type="text" placeholder="AIzaSy..." class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+        <div class="bg-amber-50 border border-amber-200 p-2.5 rounded-xl text-amber-900 text-[11px] leading-relaxed">
+          Бесплатный ключ берется в <strong>Google AI Studio</strong> (aistudio.google.com → <em>Get API key</em>). Ключ сохраняется строго на вашем телефоне.
+        </div>
+      </div>
+      <div class="flex space-x-2 pt-1">
+        <button id="saveApiKeyBtn" class="w-full bg-emerald-700 text-white py-2.5 rounded-xl text-xs font-bold hover:bg-emerald-800 transition">
+          Сохранить и активировать
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Основная рабочая область -->
+  <main class="flex-1 flex flex-col max-w-md w-full mx-auto">
+    
+    <!-- Вкладка 1: СКАНЕР -->
+    <section id="tabScanner" class="flex-1 flex flex-col p-4 space-y-3">
+      
+      <!-- Окно видоискателя камеры -->
+      <div class="relative w-full aspect-[4/3] bg-black rounded-2xl overflow-hidden shadow-lg border border-slate-300 flex items-center justify-center">
+        <!-- Видеопоток -->
+        <video id="cameraVideo" class="w-full h-full object-cover" autoplay playsinline muted></video>
+        <!-- Скрытый холст -->
+        <canvas id="captureCanvas" class="hidden"></canvas>
+
+        <!-- Рамка захвата с живым индикатором Шага 1 (Название) и Шага 2 (Дата) -->
+        <div class="absolute inset-0 pointer-events-none flex flex-col items-center justify-center p-4">
+          <div id="scannerTargetBox" class="w-64 h-44 border-2 border-dashed border-emerald-400 rounded-xl scanner-target flex flex-col justify-between p-2 transition-colors duration-300">
+            <span id="viewfinderStepBadge" class="text-[11px] text-white bg-emerald-700/90 px-2.5 py-1 rounded-lg self-center font-extrabold flex items-center gap-1.5 shadow">
+              <i data-lucide="scan-line" class="w-3.5 h-3.5"></i>
+              <span>ШАГ 1/2: НАВЕДИТЕ НА НАЗВАНИЕ</span>
+            </span>
+            <div id="viewfinderMidHint" class="text-center text-white text-xs font-bold bg-black/50 rounded px-2 py-0.5 mx-auto hidden"></div>
+            <div class="flex justify-between items-center text-emerald-300/60">
+              <i data-lucide="corner-down-right" class="w-4 h-4"></i>
+              <i data-lucide="corner-down-left" class="w-4 h-4"></i>
+            </div>
+          </div>
+        </div>
+
+        <!-- Управление камерой и звуком -->
+        <div class="absolute top-3 right-3 flex flex-col space-y-2">
+          <button id="toggleCameraBtn" class="bg-black/60 text-white p-2.5 rounded-full hover:bg-black/80 transition backdrop-blur-sm" title="Переключить камеру">
+            <i data-lucide="video" class="w-4 h-4"></i>
+          </button>
+          <button id="toggleSoundBtn" class="bg-black/60 text-emerald-300 p-2.5 rounded-full hover:bg-black/80 transition backdrop-blur-sm" title="Звуковой пик сканера">
+            <i data-lucide="volume-2" class="w-4 h-4"></i>
+          </button>
+        </div>
+
+        <!-- Статусная плашка внизу видоискателя -->
+        <div class="absolute bottom-2 inset-x-2 bg-slate-900/85 backdrop-blur-sm text-slate-100 text-xs px-3 py-1.5 rounded-lg text-center font-medium flex items-center justify-center gap-2">
+          <span id="autoPulseDot" class="w-2 h-2 rounded-full bg-emerald-400 animate-ping shrink-0"></span>
+          <span id="scanStatusText">Авто-поиск: 1) Название → вибро → 2) Дата → база</span>
+        </div>
+      </div>
+
+      <!-- Панель конвейерного авто-сканирования без нажатия кнопок -->
+      <div class="bg-white border border-slate-200 rounded-xl px-3 py-2 flex items-center justify-between shadow-sm gap-2">
+        <div class="flex items-center space-x-2 min-w-0">
+          <div class="bg-emerald-100 text-emerald-700 p-1.5 rounded-lg shrink-0">
+            <i data-lucide="Zap" class="w-4 h-4"></i>
+          </div>
+          <div class="min-w-0">
+            <p class="text-xs font-bold text-slate-800 leading-none truncate">Конвейер без кнопок (Авто-захват)</p>
+            <p class="text-[10px] text-slate-500 mt-0.5 truncate">1: Название (вибро) → 2: Дата (вибро + в базу)</p>
+          </div>
+        </div>
+        <div class="flex items-center gap-1.5 shrink-0">
+          <button id="handsFreeToggleBtn" type="button" class="bg-emerald-600 text-white text-[11px] font-bold px-2.5 py-1.5 rounded-lg shadow-sm transition flex items-center gap-1">
+            <span>АВТО-КАМЕРА: ВКЛ</span>
+          </button>
+          <button id="autoModeToggleBtn" type="button" class="bg-slate-100 text-slate-700 text-[10px] font-bold px-2 py-1.5 rounded-lg border border-slate-200 transition" title="Сохранять без всплывающего окна">
+            АВТО: ВКЛ
+          </button>
+        </div>
+      </div>
+
+      <!-- Плашка ожидания второго сканирования (когда название на одной стороне, а дата на другой) -->
+      <div id="pendingScanBanner" class="bg-amber-50 border-2 border-amber-400 rounded-xl p-3 shadow-md space-y-2 hidden">
+        <div class="flex items-start justify-between">
+          <div class="flex items-center gap-1.5 text-amber-900 font-bold text-xs">
+            <i data-lucide="rotate-cw" class="w-4 h-4 text-amber-600 animate-spin"></i>
+            <span id="pendingStepTitle">Шаг 1/2 выполнен: переверните товар</span>
+          </div>
+          <button id="cancelPendingBtn" class="text-xs text-slate-400 hover:text-rose-600 font-bold px-1">✕ Сброс</button>
+        </div>
+        <div class="bg-white/80 rounded-lg p-2 text-xs space-y-0.5 border border-amber-200">
+          <div id="pendingCapturedTitle" class="font-bold text-slate-800">📦 Товар: не определен</div>
+          <div id="pendingCapturedDate" class="text-slate-600">📅 Срок: ожидается сканирование оборота...</div>
+        </div>
+        <div class="flex items-center justify-between gap-1 pt-0.5">
+          <span class="text-[10px] text-amber-800 font-medium">Или выберите срок в 1 клик без 2-го скана:</span>
+          <div class="flex gap-1">
+            <button type="button" data-quick-days="3" class="quick-finish-btn bg-amber-200/80 hover:bg-amber-300 text-amber-950 px-2 py-1 rounded text-[10px] font-bold">+3д</button>
+            <button type="button" data-quick-days="7" class="quick-finish-btn bg-amber-200/80 hover:bg-amber-300 text-amber-950 px-2 py-1 rounded text-[10px] font-bold">+7д</button>
+            <button type="button" data-quick-days="30" class="quick-finish-btn bg-amber-200/80 hover:bg-amber-300 text-amber-950 px-2 py-1 rounded text-[10px] font-bold">+1мес</button>
+            <button type="button" data-quick-days="180" class="quick-finish-btn bg-amber-200/80 hover:bg-amber-300 text-amber-950 px-2 py-1 rounded text-[10px] font-bold">+6мес</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Главная кнопка сканирования -->
+      <div class="flex space-x-2">
+        <button id="aiScanBtn" class="flex-1 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 active:scale-[0.98] text-white py-3.5 px-4 rounded-xl font-bold text-sm shadow-md flex items-center justify-center gap-2 transition">
+          <i data-lucide="sparkles" class="w-5 h-5 text-amber-300"></i>
+          <span id="aiScanBtnText">СКАНИРОВАТЬ ЭТОТ ТОВАР</span>
+        </button>
+        <button id="quickVoiceBtn" class="bg-slate-800 hover:bg-slate-700 active:scale-[0.98] text-white px-3.5 rounded-xl shadow flex items-center justify-center" title="Сказать голосом">
+          <i data-lucide="mic" class="w-5 h-5 text-emerald-400"></i>
+        </button>
+      </div>
+
+      <!-- Карточка последнего зафиксированного товара с быстрыми кнопками -->
+      <div id="lastScannedCard" class="bg-emerald-50/90 border border-emerald-300 rounded-xl p-3 shadow-sm hidden">
+        <div class="flex items-start justify-between gap-2">
+          <div class="min-w-0 flex-1">
+            <span class="text-[10px] uppercase font-bold text-emerald-700 flex items-center gap-1">
+              <i data-lucide="check-circle-2" class="w-3.5 h-3.5"></i> Автоматически сохранено в базу:
+            </span>
+            <h4 id="lastScannedTitle" class="font-bold text-slate-800 text-sm truncate mt-0.5"></h4>
+            <p id="lastScannedSub" class="text-xs text-slate-600"></p>
+          </div>
+          <span id="lastScannedBadge" class="px-2 py-0.5 rounded text-xs font-bold text-white shrink-0"></span>
+        </div>
+        <div class="flex items-center justify-between mt-2 pt-2 border-t border-emerald-200/70 text-xs">
+          <div class="flex items-center gap-1.5">
+            <button id="lastItemPlusOneBtn" class="bg-white hover:bg-emerald-100 text-emerald-800 border border-emerald-300 px-2.5 py-1 rounded-lg font-bold text-[11px] transition">+1 шт.</button>
+            <button id="lastItemEditBtn" class="bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 px-2.5 py-1 rounded-lg font-medium text-[11px] transition">✏️ Изменить</button>
+          </div>
+          <button id="lastItemUndoBtn" class="text-rose-600 hover:text-rose-800 font-medium text-[11px]">Отменить запись</button>
+        </div>
+      </div>
+
+      <!-- Информационный блок -->
+      <div class="bg-white border border-slate-200 rounded-xl p-3 text-xs text-slate-600 space-y-1">
+        <div class="font-bold flex items-center gap-1.5 text-slate-800">
+          <i data-lucide="info" class="w-4 h-4 text-emerald-600"></i>
+          <span>Честный режим распознавания:</span>
+        </div>
+        <p class="text-[11px] leading-relaxed">
+          Камера передает реальный снимок в актуальную модель <strong>Gemini 3 Flash</strong>. Если в кадре мёд «Bun Străbun», нейросеть вернет именно мёд «Bun Străbun» и найдет дату на этикетке. Все заглушки отключены.
+        </p>
+      </div>
+    </section>
+
+    <!-- Вкладка 2: ЖУРНАЛ СРОКОВ В ЗАЛЕ -->
+    <section id="tabInventory" class="flex-1 flex flex-col p-4 space-y-3 hidden">
+      
+      <!-- Фильтры по срочности -->
+      <div class="flex items-center space-x-1 overflow-x-auto pb-1 custom-scroll text-xs">
+        <button data-filter="all" class="filter-btn bg-emerald-800 text-white px-3 py-1.5 rounded-lg font-medium whitespace-nowrap shadow-sm">
+          Все (<span id="countAll">0</span>)
+        </button>
+        <button data-filter="expired" class="filter-btn bg-white text-rose-600 border border-slate-200 px-3 py-1.5 rounded-lg font-medium whitespace-nowrap shadow-sm">
+          🔴 Просрочено (<span id="countExpired">0</span>)
+        </button>
+        <button data-filter="critical" class="filter-btn bg-white text-amber-600 border border-slate-200 px-3 py-1.5 rounded-lg font-medium whitespace-nowrap shadow-sm">
+          🟡 Уценка 1-3д (<span id="countCritical">0</span>)
+        </button>
+        <button data-filter="warning" class="filter-btn bg-white text-slate-600 border border-slate-200 px-3 py-1.5 rounded-lg font-medium whitespace-nowrap shadow-sm">
+          🟢 4-7 дней (<span id="countWarning">0</span>)
+        </button>
+      </div>
+
+      <!-- Поле быстрого поиска по названию -->
+      <div class="relative">
+        <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-3"></i>
+        <input id="searchInput" type="text" placeholder="Поиск в журнале..." class="w-full bg-white border border-slate-300 rounded-xl pl-9 pr-3 py-2 text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+      </div>
+
+      <!-- Список товаров -->
+      <div id="inventoryList" class="flex-1 space-y-2 overflow-y-auto max-h-[55vh] custom-scroll pr-0.5">
+        <!-- Генерируется скриптом -->
+      </div>
+
+      <!-- Кнопка очистки / сброса -->
+      <div class="pt-2 flex justify-between items-center text-[11px] text-slate-500">
+        <span id="inventorySummaryText">Всего товаров: 0</span>
+        <button id="clearInventoryBtn" class="text-rose-600 hover:text-rose-800 font-medium">Очистить журнал</button>
+      </div>
+    </section>
+
+    <!-- Вкладка 3: БАЗА ПО КАТЕГОРИЯМ -->
+    <section id="tabCategories" class="flex-1 flex flex-col p-4 space-y-3 hidden">
+      <div class="flex items-center justify-between">
+        <div>
+          <h2 class="font-bold text-sm text-slate-800">Автоматическая база категорий</h2>
+          <p class="text-[11px] text-slate-500">Gemini сам распределяет товары по отделам</p>
+        </div>
+        <button id="addCategoryBtn" class="bg-emerald-700 hover:bg-emerald-800 text-white px-2.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1 shadow-sm transition">
+          <i data-lucide="folder-plus" class="w-3.5 h-3.5"></i>
+          <span>+ Отдел</span>
+        </button>
+      </div>
+
+      <!-- Форма добавления новой категории (скрыта по умолчанию) -->
+      <div id="newCategoryBox" class="bg-white border border-emerald-300 rounded-xl p-3 shadow-sm space-y-2 hidden">
+        <label class="block text-[11px] font-bold text-slate-600">Название новой категории / отдела:</label>
+        <div class="flex gap-2">
+          <input id="newCategoryInput" type="text" placeholder="Например: 🧁 Кондитерка и торты" class="flex-1 bg-slate-50 border border-slate-300 rounded-xl px-3 py-1.5 text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+          <button id="saveNewCategoryBtn" class="bg-emerald-600 text-white px-3 py-1.5 rounded-xl text-xs font-bold">Создать</button>
+        </div>
+      </div>
+
+      <!-- Список карточек категорий -->
+      <div id="categoriesContainer" class="space-y-2.5 overflow-y-auto max-h-[65vh] custom-scroll pr-0.5">
+        <!-- Генерируется скриптом -->
+      </div>
+    </section>
+
+    <!-- Вкладка 4: УВЕДОМЛЕНИЯ И НАСТРОЙКИ СРОКОВ -->
+    <section id="tabNotifications" class="flex-1 flex flex-col p-4 space-y-3 hidden">
+      <div class="bg-white border border-slate-200 rounded-2xl p-3.5 shadow-sm space-y-3">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <div class="bg-amber-100 text-amber-700 p-2 rounded-xl">
+              <i data-lucide="bell-ring" class="w-5 h-5"></i>
+            </div>
+            <div>
+              <h3 class="font-bold text-sm text-slate-800">Пороги авто-уведомлений</h3>
+              <p class="text-[11px] text-slate-500">За сколько дней до срока предупреждать</p>
+            </div>
+          </div>
+          <button id="enablePushBtn" class="bg-emerald-700 hover:bg-emerald-800 text-white px-2.5 py-1.5 rounded-xl text-[11px] font-bold transition">
+            Push-тест
+          </button>
+        </div>
+
+        <!-- Переключатели дней: 2, 3, 5, 10, 30 дней -->
+        <div class="grid grid-cols-5 gap-1.5 pt-1" id="thresholdToggles">
+          <button type="button" data-thresh="2" class="thresh-btn py-2 rounded-xl text-xs font-bold border transition flex flex-col items-center">
+            <span>2 дн.</span>
+            <span class="text-[9px] font-normal opacity-80">Срочно</span>
+          </button>
+          <button type="button" data-thresh="3" class="thresh-btn py-2 rounded-xl text-xs font-bold border transition flex flex-col items-center">
+            <span>3 дн.</span>
+            <span class="text-[9px] font-normal opacity-80">Уценка</span>
+          </button>
+          <button type="button" data-thresh="5" class="thresh-btn py-2 rounded-xl text-xs font-bold border transition flex flex-col items-center">
+            <span>5 дн.</span>
+            <span class="text-[9px] font-normal opacity-80">Контроль</span>
+          </button>
+          <button type="button" data-thresh="10" class="thresh-btn py-2 rounded-xl text-xs font-bold border transition flex flex-col items-center">
+            <span>10 дн.</span>
+            <span class="text-[9px] font-normal opacity-80">Заранее</span>
+          </button>
+          <button type="button" data-thresh="30" class="thresh-btn py-2 rounded-xl text-xs font-bold border transition flex flex-col items-center">
+            <span>30 дн.</span>
+            <span class="text-[9px] font-normal opacity-80">1 месяц</span>
+          </button>
+        </div>
+
+        <!-- Добавление своего порога дней -->
+        <div class="flex items-center justify-between pt-2 border-t border-slate-100 text-xs">
+          <span class="text-slate-600 font-medium">Свой порог (в днях):</span>
+          <div class="flex items-center gap-1.5">
+            <input id="customThresholdInput" type="number" min="1" max="365" placeholder="14" class="w-16 bg-slate-50 border border-slate-300 rounded-lg px-2 py-1 text-center font-bold text-xs">
+            <button id="addCustomThresholdBtn" class="bg-slate-800 text-white px-2.5 py-1 rounded-lg text-xs font-bold">+ Добавить</button>
+          </div>
+        </div>
+        <div id="activeThresholdsList" class="text-[11px] text-emerald-800 bg-emerald-50 px-2.5 py-1.5 rounded-lg font-medium">
+          Активные напоминания: за 2, 3, 5, 10, 30 дн.
+        </div>
+      </div>
+
+      <!-- Лента сработавших уведомлений по текущим товарам -->
+      <div class="flex items-center justify-between pt-1">
+        <h4 class="font-bold text-xs uppercase text-slate-500">Требуют внимания сегодня (<span id="alertsCountLabel">0</span>):</h4>
+        <button id="refreshAlertsBtn" class="text-xs text-emerald-700 font-bold flex items-center gap-1">
+          <i data-lucide="refresh-cw" class="w-3 h-3"></i> Проверить сейчас
+        </button>
+      </div>
+
+      <div id="notificationsFeed" class="flex-1 space-y-2 overflow-y-auto max-h-[42vh] custom-scroll pr-0.5">
+        <!-- Генерируется скриптом -->
+      </div>
+    </section>
+
+    <!-- Вкладка 5: ЦВЕТОВАЯ МАРКИРОВКА И ПЕЧАТЬ СТИКЕРОВ НА ПОЛКИ -->
+    <section id="tabStickers" class="flex-1 flex flex-col p-4 space-y-3 hidden">
+      
+      <!-- Памятка системы «Светофор на полках» -->
+      <div class="bg-white border border-slate-200 rounded-2xl p-3.5 shadow-sm space-y-2.5 no-print">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <div class="bg-emerald-100 text-emerald-800 p-2 rounded-xl">
+              <i data-lucide="tag" class="w-5 h-5"></i>
+            </div>
+            <div>
+              <h2 class="font-bold text-sm text-slate-800">Система «Светофор полок»</h2>
+              <p class="text-[11px] text-slate-500">Визуальный контроль для кассиров без телефона</p>
+            </div>
+          </div>
+          <button id="printLegendBtn" type="button" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-2.5 py-1.5 rounded-xl text-[11px] font-bold flex items-center gap-1 transition" title="Распечатать памятку на кассу">
+            <i data-lucide="file-text" class="w-3.5 h-3.5"></i>
+            <span>Памятка</span>
+          </button>
+        </div>
+
+        <!-- Шкала 5 цветов -->
+        <div class="grid grid-cols-5 gap-1 text-[10px] font-bold text-center">
+          <div class="bg-rose-600 text-white p-1.5 rounded-lg">
+            <div>🔴 КРАСНЫЙ</div>
+            <div class="text-[9px] font-normal opacity-90">&le; 7 дней</div>
+          </div>
+          <div class="bg-orange-500 text-white p-1.5 rounded-lg">
+            <div>🟠 ОРАНЖ</div>
+            <div class="text-[9px] font-normal opacity-90">8–14 дн.</div>
+          </div>
+          <div class="bg-amber-400 text-slate-900 p-1.5 rounded-lg">
+            <div>🟡 ЖЕЛТЫЙ</div>
+            <div class="text-[9px] font-normal opacity-90">15–30 дн.</div>
+          </div>
+          <div class="bg-sky-600 text-white p-1.5 rounded-lg">
+            <div>🔵 СИНИЙ</div>
+            <div class="text-[9px] font-normal opacity-90">1–6 мес.</div>
+          </div>
+          <div class="bg-emerald-600 text-white p-1.5 rounded-lg">
+            <div>🟢 ЗЕЛЕНЫЙ</div>
+            <div class="text-[9px] font-normal opacity-90">&gt; 6 мес.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Фильтры генератора стикеров -->
+      <div class="bg-white border border-slate-200 rounded-2xl p-3.5 shadow-sm space-y-2.5 no-print">
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Категория товаров:</label>
+            <select id="stickerCatFilter" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-2.5 py-2 text-xs font-bold text-slate-800 focus:outline-none">
+              <option value="all">Все категории</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Цветовая зона срока:</label>
+            <select id="stickerZoneFilter" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-2.5 py-2 text-xs font-bold text-slate-800 focus:outline-none">
+              <option value="all">Все цвета (по базе)</option>
+              <option value="red">🔴 Красные (&le; 7 дн.)</option>
+              <option value="orange">🟠 Оранжевые (8–14 дн.)</option>
+              <option value="yellow">🟡 Желтые (15–30 дн. / ~1 мес.)</option>
+              <option value="blue">🔵 Синие (1–6 мес.)</option>
+              <option value="green">🟢 Зеленые (&gt; 6 мес.)</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Быстрая генерация шаблонных стикеров (даже если товара еще нет в списке) -->
+        <div class="pt-1 border-t border-slate-100 flex items-center justify-between gap-2">
+          <span class="text-[11px] text-slate-600 font-medium">Быстрый лист шаблонов на полки:</span>
+          <div class="flex gap-1">
+            <button type="button" data-tpl-zone="red" class="tpl-sticker-btn bg-rose-100 hover:bg-rose-200 text-rose-800 px-2 py-1 rounded-lg text-[10px] font-bold">+6 Красных</button>
+            <button type="button" data-tpl-zone="yellow" class="tpl-sticker-btn bg-amber-100 hover:bg-amber-200 text-amber-900 px-2 py-1 rounded-lg text-[10px] font-bold">+6 Желтых (1м)</button>
+            <button type="button" data-tpl-zone="green" class="tpl-sticker-btn bg-emerald-100 hover:bg-emerald-200 text-emerald-800 px-2 py-1 rounded-lg text-[10px] font-bold">+6 Зеленых (6м+)</button>
+          </div>
+        </div>
+
+        <!-- Кнопки печати и сброса шаблонов -->
+        <div class="flex gap-2 pt-1">
+          <button id="printStickersBtn" type="button" class="flex-1 bg-emerald-700 hover:bg-emerald-800 active:scale-[0.98] text-white py-2.5 px-3 rounded-xl font-bold text-xs shadow flex items-center justify-center gap-1.5 transition">
+            <i data-lucide="printer" class="w-4 h-4"></i>
+            <span>РАСПЕЧАТАТЬ / СОХРАНИТЬ PDF</span>
+          </button>
+          <button id="clearTemplateStickersBtn" type="button" class="bg-slate-100 hover:bg-slate-200 text-slate-600 px-3 py-2.5 rounded-xl font-medium text-xs transition hidden">
+            Сбросить шаблоны
+          </button>
+        </div>
+      </div>
+
+      <!-- Область предпросмотра и печати стикеров -->
+      <div id="printableStickerArea" class="bg-white border border-slate-200 rounded-2xl p-3 shadow-sm space-y-2">
+        <div class="flex items-center justify-between border-b border-slate-200 pb-2">
+          <div>
+            <h3 id="printSheetTitle" class="font-bold text-xs text-slate-800 uppercase">Лист цветовой маркировки полок (Linella)</h3>
+            <p id="printSheetSub" class="text-[10px] text-slate-500">Наклейте стикер на торец полки или ценникодержатель рядом с товаром</p>
+          </div>
+          <span id="stickerCountBadge" class="bg-slate-100 text-slate-700 text-[10px] font-bold px-2 py-0.5 rounded">0 шт.</span>
+        </div>
+
+        <!-- Сетка стикеров для нарезки / наклейки -->
+        <div id="stickersGrid" class="grid grid-cols-2 gap-2 pt-1">
+          <!-- Генерируется скриптом -->
+        </div>
+      </div>
+
+    </section>
+
+  </main>
+
+  <!-- Модальное окно подтверждения партии -->
+  <div id="confirmModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 hidden">
+    <div class="bg-white w-full max-w-md rounded-t-2xl sm:rounded-2xl p-5 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+      
+      <div class="flex items-center justify-between border-b pb-2">
+        <div class="flex items-center gap-2">
+          <div class="bg-amber-100 text-amber-800 p-1.5 rounded-lg">
+            <i data-lucide="sparkles" class="w-5 h-5"></i>
+          </div>
+          <h3 class="font-bold text-base text-slate-800">Результат анализа Gemini</h3>
+        </div>
+        <button id="closeModalBtn" class="text-slate-400 hover:text-slate-600 p-1">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <!-- Поле названия -->
+      <div>
+        <label class="block text-[11px] font-bold text-slate-500 uppercase mb-1">Товар (режим редактирования):</label>
+        <div class="relative flex items-center">
+          <input id="modalTitleInput" type="text" class="w-full bg-slate-50 border border-slate-300 rounded-xl pl-3 pr-10 py-2.5 text-sm font-semibold text-slate-800 focus:ring-2 focus:ring-emerald-500 focus:outline-none" placeholder="Название товара">
+          <button id="modalMicBtn" type="button" class="absolute right-2 text-slate-400 hover:text-emerald-600 p-1" title="Сказать название голосом">
+            <i data-lucide="mic" class="w-4 h-4"></i>
+          </button>
+        </div>
+        <div class="flex justify-between items-center mt-1">
+          <span id="modalBarcodeTag" class="text-[10px] text-slate-400">Штрихкод: не найден</span>
+          <span id="sourceConfidenceTag" class="text-[10px] text-emerald-600 font-bold flex items-center gap-1">
+            <i data-lucide="check" class="w-3 h-3"></i> Реальное зрение
+          </span>
+        </div>
+      </div>
+
+      <!-- Выбор или ввод категории -->
+      <div>
+        <label class="block text-[11px] font-bold text-slate-500 uppercase mb-1">Категория / Отдел:</label>
+        <div class="flex gap-2">
+          <select id="modalCategorySelect" class="flex-1 bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+            <!-- Заполняется динамически -->
+          </select>
+          <input id="modalCustomCategoryInput" type="text" placeholder="Или новая..." class="w-28 bg-slate-50 border border-slate-300 rounded-xl px-2.5 py-2 text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+        </div>
+      </div>
+
+      <!-- Выбор даты окончания срока -->
+      <div>
+        <label class="block text-[11px] font-bold text-slate-500 uppercase mb-1">Срок годности (годен до):</label>
+        <div class="flex items-center gap-2">
+          <input id="modalDateInput" type="date" class="flex-1 bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm font-bold text-emerald-800 focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+          <div id="modalDaysTag" class="bg-emerald-100 text-emerald-800 text-xs font-bold px-3 py-2 rounded-xl border border-emerald-200 whitespace-nowrap">
+            Осталось: 5 дн.
+          </div>
+        </div>
+      </div>
+
+      <!-- Быстрые чипы-пресеты даты -->
+      <div>
+        <span class="block text-[10px] text-slate-400 mb-1">Быстрый выбор срока:</span>
+        <div class="grid grid-cols-4 gap-1.5 text-xs">
+          <button type="button" data-add-days="3" class="date-chip bg-slate-100 hover:bg-emerald-100 hover:text-emerald-800 py-1.5 rounded-lg border border-slate-200 font-medium text-center transition">+3 дня</button>
+          <button type="button" data-add-days="7" class="date-chip bg-slate-100 hover:bg-emerald-100 hover:text-emerald-800 py-1.5 rounded-lg border border-slate-200 font-medium text-center transition">+7 дней</button>
+          <button type="button" data-add-days="30" class="date-chip bg-slate-100 hover:bg-emerald-100 hover:text-emerald-800 py-1.5 rounded-lg border border-slate-200 font-medium text-center transition">+1 месяц</button>
+          <button type="button" data-add-days="365" class="date-chip bg-slate-100 hover:bg-emerald-100 hover:text-emerald-800 py-1.5 rounded-lg border border-slate-200 font-medium text-center transition">+1 год (мёд)</button>
+        </div>
+      </div>
+
+      <!-- Количество упаковок -->
+      <div class="flex items-center justify-between bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+        <span class="text-xs font-medium text-slate-600">Количество на полке:</span>
+        <div class="flex items-center space-x-2">
+          <button id="qtyMinusBtn" class="w-7 h-7 bg-white border border-slate-300 rounded-lg flex items-center justify-center font-bold text-slate-600 hover:bg-slate-100">-</button>
+          <span id="qtyVal" class="font-bold text-sm w-6 text-center">1</span>
+          <button id="qtyPlusBtn" class="w-7 h-7 bg-white border border-slate-300 rounded-lg flex items-center justify-center font-bold text-slate-600 hover:bg-slate-100">+</button>
+        </div>
+      </div>
+
+      <!-- Главная кнопка сохранения в 1 тап -->
+      <button id="saveItemBtn" class="w-full bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white py-3.5 rounded-xl font-bold text-sm shadow-md flex items-center justify-center gap-2 transition">
+        <i data-lucide="check" class="w-5 h-5"></i>
+        <span>СОХРАНИТЬ В ЖУРНАЛ (1 ТАП)</span>
+      </button>
+
+    </div>
+  </div>
+
+  <!-- Нижняя панель навигации (4 раздела) -->
+  <nav class="fixed bottom-0 inset-x-0 bg-white border-t border-slate-200 z-20 py-1.5 px-2 flex justify-around items-center max-w-md mx-auto shadow-lg">
+    <button id="navScanBtn" class="flex flex-col items-center text-emerald-700 font-bold text-[11px] space-y-0.5 px-2">
+      <i data-lucide="scan" class="w-5 h-5"></i>
+      <span>Сканер</span>
+    </button>
+    <button id="navInvBtn" class="flex flex-col items-center text-slate-400 hover:text-slate-600 font-medium text-[11px] space-y-0.5 px-2">
+      <div class="relative">
+        <i data-lucide="clipboard-list" class="w-5 h-5"></i>
+        <span id="navBadge" class="absolute -top-1 -right-2 bg-rose-500 text-white rounded-full text-[9px] w-4 h-4 flex items-center justify-center font-bold hidden">0</span>
+      </div>
+      <span>Журнал зала</span>
+    </button>
+    <button id="navCatBtn" class="flex flex-col items-center text-slate-400 hover:text-slate-600 font-medium text-[11px] space-y-0.5 px-2">
+      <div class="relative">
+        <i data-lucide="folder-kanban" class="w-5 h-5"></i>
+        <span id="navCatBadge" class="absolute -top-1 -right-2 bg-emerald-600 text-white rounded-full text-[9px] w-4 h-4 flex items-center justify-center font-bold hidden">0</span>
+      </div>
+      <span>Категории</span>
+    </button>
+    <button id="navNotifBtn" class="flex flex-col items-center text-slate-400 hover:text-slate-600 font-medium text-[11px] space-y-0.5 px-1.5">
+      <div class="relative">
+        <i data-lucide="bell" class="w-5 h-5"></i>
+        <span id="navNotifBadge" class="absolute -top-1 -right-2 bg-amber-500 text-white rounded-full text-[9px] w-4 h-4 flex items-center justify-center font-bold hidden">0</span>
+      </div>
+      <span>Сроки/Пуш</span>
+    </button>
+    <button id="navStickerBtn" class="flex flex-col items-center text-slate-400 hover:text-slate-600 font-medium text-[11px] space-y-0.5 px-1.5">
+      <div class="relative">
+        <i data-lucide="printer" class="w-5 h-5"></i>
+      </div>
+      <span>Стикеры</span>
+    </button>
+  </nav>
+
+  <!-- Скрипт приложения -->
+  <script>
+    lucide.createIcons();
+
+    let inventory = [];
+    let barcodeCache = {};
+    let geminiApiKey = '';
+    let currentFilter = 'all';
+    let videoStream = null;
+    let currentQty = 1;
+    let autoSaveMode = true;
+    // Состояние двухэтапного сканирования (когда название и дата на разных сторонах)
+    let pendingScan = {
+      title: '',
+      expiryDate: '',
+      barcode: '',
+      category: ''
+    };
+    let lastSavedItemId = null;
+    let editingItemId = null; // ID редактируемого товара (если открыто из меню/журнала)
+
+    let categories = [
+      '🥛 Молочные продукты',
+      '🍫 Сладости и шоколад',
+      '🥩 Колбасы и мясо',
+      '🧀 Сыры',
+      '🍯 Бакалея и мёд',
+      '🥖 Хлеб и выпечка',
+      '🥫 Консервы и соусы',
+      '🥤 Напитки и соки',
+      '📦 Прочее'
+    ];
+
+    // Пороги уведомлений в днях (по умолчанию: за 2, 3, 5, 10 и 30 дней)
+    let alertThresholds = [2, 3, 5, 10, 30];
+    let selectedCategoryFilter = 'all';
+
+    // Загрузка состояния
+    try {
+      const savedInv = localStorage.getItem('expiry_guard_inventory');
+      if (savedInv) inventory = JSON.parse(savedInv);
+      const savedCache = localStorage.getItem('expiry_guard_barcode_cache');
+      if (savedCache) barcodeCache = JSON.parse(savedCache);
+      const savedCats = localStorage.getItem('expiry_guard_categories');
+      if (savedCats) categories = JSON.parse(savedCats);
+      const savedThresh = localStorage.getItem('expiry_guard_thresholds');
+      if (savedThresh) alertThresholds = JSON.parse(savedThresh);
+      const savedKey = localStorage.getItem('expiry_guard_gemini_key');
+      if (savedKey) {
+        geminiApiKey = savedKey.trim();
+        document.getElementById('apiKeyInput').value = geminiApiKey;
+        document.getElementById('keyStatusLabel').innerText = 'AI активен ✅';
+      }
+    } catch (e) {}
+
+    // Умный авто-определитель категории по названию товара
+    function inferCategoryFromTitle(title, aiSuggestedCategory) {
+      if (aiSuggestedCategory && aiSuggestedCategory !== 'null' && aiSuggestedCategory.trim() !== '') {
+        const cleanCat = aiSuggestedCategory.trim();
+        if (!categories.includes(cleanCat)) {
+          categories.unshift(cleanCat);
+        }
+        return cleanCat;
+      }
+      const t = (title || '').toLowerCase();
+      if (t.includes('молок') || t.includes('кефир') || t.includes('сметан') || t.includes('йогурт') || t.includes('творог') || t.includes('lapte') || t.includes('chefir') || t.includes('smantana') || t.includes('jlc') || t.includes('alba') || t.includes('incomlac')) {
+        return '🥛 Молочные продукты';
+      }
+      if (t.includes('шоколад') || t.includes('terravita') || t.includes('конфет') || t.includes('печенье') || t.includes('вафл') || t.includes('батончик') || t.includes('ciocolata') || t.includes('bucuria')) {
+        return '🍫 Сладости и шоколад';
+      }
+      if (t.includes('мёд') || t.includes('мед') || t.includes('miere') || t.includes('străbun') || t.includes('strabun') || t.includes('круп') || t.includes('макарон') || t.includes('мука') || t.includes('сахар') || t.includes('чай') || t.includes('кофе')) {
+        return '🍯 Бакалея и мёд';
+      }
+      if (t.includes('колбас') || t.includes('сосиск') || t.includes('мяс') || t.includes('куриц') || t.includes('ветчин') || t.includes('rogob') || t.includes('carmez') || t.includes('pegas')) {
+        return '🥩 Колбасы и мясо';
+      }
+      if (t.includes('сыр') || t.includes('брынз') || t.includes('cascaval') || t.includes('branza')) {
+        return '🧀 Сыры';
+      }
+      if (t.includes('хлеб') || t.includes('батон') || t.includes('торт') || t.includes('булоч') || t.includes('franzeluta')) {
+        return '🥖 Хлеб и выпечка';
+      }
+      if (t.includes('майонез') || t.includes('кетчуп') || t.includes('соус') || t.includes('консерв') || t.includes('горошек') || t.includes('кукуруз') || t.includes('тушенк')) {
+        return '🥫 Консервы и соусы';
+      }
+      if (t.includes('сок') || t.includes('вода') || t.includes('напиток') || t.includes('квас') || t.includes('пиво') || t.includes('вино')) {
+        return '🥤 Напитки и соки';
+      }
+      return '📦 Прочее';
+    }
+
+    // Гарантируем, что у всех существующих товаров есть категория
+    inventory.forEach(item => {
+      if (!item.category) {
+        item.category = inferCategoryFromTitle(item.title, '');
+      }
+      if (!categories.includes(item.category)) {
+        categories.push(item.category);
+      }
+    });
+
+    // Всплывающее уведомление
+    function showToast(message, isError = false) {
+      const toast = document.getElementById('toastNotification');
+      const msg = document.getElementById('toastMessage');
+      const icon = document.getElementById('toastIcon');
+
+      msg.innerText = message;
+      if (isError) {
+        icon.className = 'w-4 h-4 text-rose-400 shrink-0';
+      } else {
+        icon.className = 'w-4 h-4 text-emerald-400 shrink-0';
+      }
+
+      toast.classList.remove('opacity-0', '-translate-y-10', 'pointer-events-none');
+      toast.classList.add('opacity-100', 'translate-y-0');
+
+      setTimeout(() => {
+        toast.classList.remove('opacity-100', 'translate-y-0');
+        toast.classList.add('opacity-0', '-translate-y-10', 'pointer-events-none');
+      }, 4000);
+    }
+
+    function getDaysDiff(targetDateStr) {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const target = new Date(targetDateStr);
+      target.setHours(0, 0, 0, 0);
+      return Math.round((target - today) / (1000 * 60 * 60 * 24));
+    }
+
+    function formatDisplayDate(dateStr) {
+      const parts = dateStr.split('-');
+      if (parts.length === 3) return `${parts[2]}.${parts[1]}.${parts[0]}`;
+      return dateStr;
+    }
+
+    let templateStickers = []; // Дополнительные шаблонные стикеры для печати
+    let showingLegendSheet = false;
+
+    // Определение цветовой зоны «Светофора полки» по остатку дней
+    function getShelfColorZone(days) {
+      if (days <= 7) {
+        return {
+          code: 'red',
+          name: 'КРАСНЫЙ СТИКЕР',
+          shortLabel: '🔴 < 1 НЕДЕЛИ',
+          actionText: 'ЕЖЕДНЕВНЫЙ КОНТРОЛЬ / УЦЕНКА',
+          bgHeader: 'bg-rose-600 text-white',
+          borderBox: 'border-rose-600 bg-rose-50/40',
+          dotColor: 'bg-rose-600'
+        };
+      } else if (days <= 14) {
+        return {
+          code: 'orange',
+          name: 'ОРАНЖЕВЫЙ СТИКЕР',
+          shortLabel: '🟠 ДО 2 НЕДЕЛЬ',
+          actionText: 'ВЫДВИНУТЬ ВПЕРЕД (FEFO)',
+          bgHeader: 'bg-orange-500 text-white',
+          borderBox: 'border-orange-500 bg-orange-50/40',
+          dotColor: 'bg-orange-500'
+        };
+      } else if (days <= 35) {
+        return {
+          code: 'yellow',
+          name: 'ЖЕЛТЫЙ СТИКЕР',
+          shortLabel: '🟡 ~1 МЕСЯЦ',
+          actionText: 'ПРОВЕРКА ЗА 10 ДНЕЙ ДО СРОКА',
+          bgHeader: 'bg-amber-400 text-slate-950',
+          borderBox: 'border-amber-500 bg-amber-50/40',
+          dotColor: 'bg-amber-400'
+        };
+      } else if (days <= 180) {
+        return {
+          code: 'blue',
+          name: 'СИНИЙ СТИКЕР',
+          shortLabel: '🔵 1–6 МЕСЯЦЕВ',
+          actionText: 'ПЛАНОВАЯ РОТАЦИЯ РАЗ В МЕСЯЦ',
+          bgHeader: 'bg-sky-600 text-white',
+          borderBox: 'border-sky-600 bg-sky-50/30',
+          dotColor: 'bg-sky-600'
+        };
+      } else {
+        return {
+          code: 'green',
+          name: 'ЗЕЛЕНЫЙ СТИКЕР',
+          shortLabel: '🟢 > ПОЛУГОДА (6+ МЕС)',
+          actionText: 'БЕЗОПАСНАЯ ЗОНА (ДОЛГОСРОК)',
+          bgHeader: 'bg-emerald-600 text-white',
+          borderBox: 'border-emerald-600 bg-emerald-50/30',
+          dotColor: 'bg-emerald-600'
+        };
+      }
+    }
+
+    function saveState() {
+      try {
+        localStorage.setItem('expiry_guard_inventory', JSON.stringify(inventory));
+        localStorage.setItem('expiry_guard_barcode_cache', JSON.stringify(barcodeCache));
+        localStorage.setItem('expiry_guard_categories', JSON.stringify(categories));
+        localStorage.setItem('expiry_guard_thresholds', JSON.stringify(alertThresholds));
+      } catch (e) {}
+      renderInventory();
+      renderCategories();
+      renderNotifications();
+      renderStickers();
+      updateBadgeCounts();
+    }
+
+    // Проверка, попадает ли товар под активные пороги уведомлений (например 2, 3, 5, 10, 30 дней)
+    function getItemAlertMatch(days) {
+      if (days < 0) return { matched: true, label: 'ПРОСРОЧЕНО', level: 'expired' };
+      if (days === 0) return { matched: true, label: 'Истекает сегодня!', level: 'expired' };
+      const sorted = [...alertThresholds].sort((a, b) => a - b);
+      for (const t of sorted) {
+        if (days <= t) {
+          return {
+            matched: true,
+            label: `До срока ≤ ${t} дн. (осталось ${days} дн.)`,
+            threshold: t,
+            level: t <= 3 ? 'critical' : (t <= 10 ? 'warning' : 'month')
+          };
+        }
+      }
+      return { matched: false, label: `${days} дн.`, level: 'ok' };
+    }
+
+    function updateBadgeCounts() {
+      const countAll = inventory.length;
+      let expired = 0;
+      let critical = 0;
+      let warning = 0;
+      let alertTotal = 0;
+
+      inventory.forEach(item => {
+        const d = getDaysDiff(item.expiryDate);
+        if (d < 0) expired++;
+        else if (d <= 3) critical++;
+        else if (d <= 7) warning++;
+
+        const alertInfo = getItemAlertMatch(d);
+        if (alertInfo.matched) alertTotal++;
+      });
+
+      document.getElementById('countAll').innerText = countAll;
+      document.getElementById('countExpired').innerText = expired;
+      document.getElementById('countCritical').innerText = critical;
+      document.getElementById('countWarning').innerText = warning;
+      document.getElementById('inventorySummaryText').innerText = `Всего товаров в зале: ${countAll}`;
+
+      const navBadge = document.getElementById('navBadge');
+      const urgentTotal = expired + critical;
+      if (urgentTotal > 0) {
+        navBadge.innerText = urgentTotal;
+        navBadge.classList.remove('hidden');
+      } else {
+        navBadge.classList.add('hidden');
+      }
+
+      // Бейдж количества категорий с товарами
+      const activeCatsCount = new Set(inventory.map(i => i.category)).size;
+      const navCatBadge = document.getElementById('navCatBadge');
+      if (activeCatsCount > 0) {
+        navCatBadge.innerText = activeCatsCount;
+        navCatBadge.classList.remove('hidden');
+      } else {
+        navCatBadge.classList.add('hidden');
+      }
+
+      // Бейдж уведомлений по настроенным порогам (2, 3, 5, 10, 30 дней)
+      const navNotifBadge = document.getElementById('navNotifBadge');
+      if (alertTotal > 0) {
+        navNotifBadge.innerText = alertTotal;
+        navNotifBadge.classList.remove('hidden');
+      } else {
+        navNotifBadge.classList.add('hidden');
+      }
+    }
+
+    // Рендер журнала
+    function renderInventory() {
+      const listEl = document.getElementById('inventoryList');
+      const searchQuery = document.getElementById('searchInput').value.toLowerCase().trim();
+
+      let items = inventory.filter(item => {
+        const d = getDaysDiff(item.expiryDate);
+        if (currentFilter === 'expired') return d < 0;
+        if (currentFilter === 'critical') return d >= 0 && d <= 3;
+        if (currentFilter === 'warning') return d > 3 && d <= 7;
+        return true;
+      });
+
+      if (searchQuery) {
+        items = items.filter(i => i.title.toLowerCase().includes(searchQuery) || (i.barcode && i.barcode.includes(searchQuery)));
+      }
+
+      items.sort((a, b) => new Date(a.expiryDate) - new Date(b.expiryDate));
+
+      if (items.length === 0) {
+        listEl.innerHTML = `
+          <div class="text-center py-10 text-slate-400 text-xs">
+            <i data-lucide="package-check" class="w-8 h-8 mx-auto mb-2 text-emerald-500 opacity-60"></i>
+            <p>Журнал пуст.<br>Наведите камеру на товар и нажмите «Сканировать».</p>
+          </div>
+        `;
+        lucide.createIcons();
+        return;
+      }
+
+      listEl.innerHTML = items.map(item => {
+        const days = getDaysDiff(item.expiryDate);
+        let badgeColor = 'bg-emerald-600 text-white';
+        let badgeText = `${days} дн.`;
+        let cardBorder = 'border-slate-200';
+
+        if (days < 0) {
+          badgeColor = 'bg-rose-600 text-white';
+          badgeText = 'ПРОСРОЧЕН';
+          cardBorder = 'border-rose-300 bg-rose-50/40';
+        } else if (days <= 3) {
+          badgeColor = 'bg-amber-500 text-white';
+          badgeText = `УЦЕНКА (${days}д)`;
+          cardBorder = 'border-amber-300 bg-amber-50/40';
+        }
+
+        const catLabel = item.category || '📦 Прочее';
+        return `
+          <div class="bg-white border ${cardBorder} rounded-xl p-3 shadow-sm flex items-center justify-between gap-2 transition hover:shadow">
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-1.5 mb-0.5">
+                <span class="bg-slate-100 text-slate-600 text-[9px] font-bold px-1.5 py-0.5 rounded">${catLabel}</span>
+              </div>
+              <h4 class="font-bold text-xs text-slate-800 truncate">${item.title}</h4>
+              <p class="text-[11px] text-slate-500 flex items-center gap-2 mt-0.5">
+                <span>До: <strong class="text-slate-700">${formatDisplayDate(item.expiryDate)}</strong></span>
+                <span>• ${item.quantity} шт.</span>
+              </p>
+            </div>
+            <div class="flex items-center space-x-1 shrink-0">
+              <span class="px-2 py-1 rounded-lg text-[10px] font-bold ${badgeColor}">${badgeText}</span>
+              <button onclick="editItem(${item.id})" class="p-1.5 text-slate-400 hover:text-blue-600 rounded-lg hover:bg-slate-100 transition" title="Редактировать">
+                <i data-lucide="pencil" class="w-4 h-4"></i>
+              </button>
+              <button onclick="markDone(${item.id})" class="p-1.5 text-slate-400 hover:text-emerald-600 rounded-lg hover:bg-slate-100 transition" title="Уценено / снято">
+                <i data-lucide="check" class="w-4 h-4"></i>
+              </button>
+              <button onclick="deleteItem(${item.id})" class="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-slate-100 transition" title="Удалить">
+                <i data-lucide="trash-2" class="w-4 h-4"></i>
+              </button>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      lucide.createIcons();
+    }
+
+    window.markDone = function(id) {
+      inventory = inventory.filter(i => i.id !== id);
+      saveState();
+      showToast('Товар уценен / снят с контроля');
+    };
+
+    window.deleteItem = function(id) {
+      inventory = inventory.filter(i => i.id !== id);
+      saveState();
+      showToast('Позиция удалена');
+    };
+
+    // Открыть любой товар в режиме редактирования
+    window.editItem = function(id) {
+      const item = inventory.find(i => i.id === id);
+      if (!item) return;
+      editingItemId = item.id;
+      currentQty = item.quantity || 1;
+      openConfirmModal(item.barcode || '', item.title, item.expiryDate, 'Режим редактирования ✏️', item.category);
+    };
+
+    // Рендер вкладки Категории (Автоматическая база по отделам)
+    function renderCategories() {
+      const container = document.getElementById('categoriesContainer');
+      if (!container) return;
+
+      // Собираем все категории (из списка + те что есть у товаров)
+      const allCats = [...new Set([...categories, ...inventory.map(i => i.category || '📦 Прочее')])];
+
+      if (inventory.length === 0) {
+        container.innerHTML = `
+          <div class="bg-white border border-slate-200 rounded-2xl p-6 text-center space-y-2">
+            <i data-lucide="folder-kanban" class="w-8 h-8 mx-auto text-emerald-600 opacity-70"></i>
+            <p class="text-xs font-bold text-slate-700">База категорий готова к работе</p>
+            <p class="text-[11px] text-slate-500">Отсканируйте любой товар — Gemini автоматически определит его отдел (${allCats.slice(0, 4).join(', ')} и др.) и разложит по папкам.</p>
+          </div>
+        `;
+        lucide.createIcons();
+        return;
+      }
+
+      // Сортируем категории: сначала те, где больше товаров
+      const sortedCats = allCats.sort((a, b) => {
+        const countA = inventory.filter(i => (i.category || '📦 Прочее') === a).length;
+        const countB = inventory.filter(i => (i.category || '📦 Прочее') === b).length;
+        return countB - countA;
+      });
+
+      container.innerHTML = sortedCats.map((cat, idx) => {
+        const catItems = inventory.filter(i => (i.category || '📦 Прочее') === cat)
+          .sort((a, b) => new Date(a.expiryDate) - new Date(b.expiryDate));
+
+        const urgentCount = catItems.filter(i => getDaysDiff(i.expiryDate) <= 5).length;
+
+        const itemsHtml = catItems.length === 0
+          ? `<p class="text-[11px] text-slate-400 italic py-1">В этой категории пока пусто</p>`
+          : catItems.map(item => {
+              const d = getDaysDiff(item.expiryDate);
+              let badgeClass = 'bg-emerald-100 text-emerald-800';
+              if (d < 0) badgeClass = 'bg-rose-600 text-white';
+              else if (d <= 3) badgeClass = 'bg-amber-500 text-white';
+              else if (d <= 10) badgeClass = 'bg-amber-100 text-amber-900';
+
+              return `
+                <div class="flex items-center justify-between py-2 border-t border-slate-100 text-xs gap-2">
+                  <div class="min-w-0 flex-1">
+                    <p class="font-semibold text-slate-800 truncate">${item.title}</p>
+                    <p class="text-[10px] text-slate-500">Годен до: <strong>${formatDisplayDate(item.expiryDate)}</strong> • ${item.quantity} шт.</p>
+                  </div>
+                  <div class="flex items-center gap-1 shrink-0">
+                    <span class="px-2 py-0.5 rounded text-[10px] font-bold ${badgeClass}">
+                      ${d < 0 ? 'Просрочен' : d + ' дн.'}
+                    </span>
+                    <button onclick="editItem(${item.id})" class="p-1 text-slate-400 hover:text-blue-600 rounded hover:bg-slate-100" title="Редактировать">
+                      <i data-lucide="pencil" class="w-3.5 h-3.5"></i>
+                    </button>
+                    <button onclick="deleteItem(${item.id})" class="p-1 text-slate-400 hover:text-rose-600 rounded hover:bg-slate-100" title="Удалить">
+                      <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                    </button>
+                  </div>
+                </div>
+              `;
+            }).join('');
+
+        return `
+          <div class="bg-white border border-slate-200 rounded-2xl p-3.5 shadow-sm">
+            <div class="flex items-center justify-between cursor-pointer" onclick="toggleCatSection('cat_body_${idx}')">
+              <div class="flex items-center gap-2">
+                <span class="font-bold text-xs text-slate-800">${cat}</span>
+                <span class="bg-slate-100 text-slate-700 text-[10px] font-bold px-2 py-0.5 rounded-full">${catItems.length} поз.</span>
+                ${urgentCount > 0 ? `<span class="bg-rose-100 text-rose-700 text-[10px] font-bold px-2 py-0.5 rounded-full">⚠️ ${urgentCount} скоро</span>` : ''}
+              </div>
+              <i data-lucide="chevron-down" class="w-4 h-4 text-slate-400"></i>
+            </div>
+            <div id="cat_body_${idx}" class="${catItems.length > 0 ? 'mt-2' : 'mt-2 hidden'}">
+              ${itemsHtml}
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      lucide.createIcons();
+    }
+
+    window.toggleCatSection = function(elId) {
+      const el = document.getElementById(elId);
+      if (el) el.classList.toggle('hidden');
+    };
+
+    // Рендер вкладки Уведомлений и порогов (за 2, 3, 5, 10, 30 дней)
+    function renderNotifications() {
+      // Обновляем кнопки порогов
+      document.querySelectorAll('.thresh-btn').forEach(btn => {
+        const val = parseInt(btn.getAttribute('data-thresh'));
+        if (alertThresholds.includes(val)) {
+          btn.className = 'thresh-btn py-2 rounded-xl text-xs font-bold border border-emerald-600 bg-emerald-600 text-white transition flex flex-col items-center shadow-sm';
+        } else {
+          btn.className = 'thresh-btn py-2 rounded-xl text-xs font-bold border border-slate-200 bg-slate-50 text-slate-500 transition flex flex-col items-center';
+        }
+      });
+
+      const sortedThresh = [...alertThresholds].sort((a, b) => a - b);
+      const listLabel = document.getElementById('activeThresholdsList');
+      if (listLabel) {
+        listLabel.innerText = sortedThresh.length > 0
+          ? `🔔 Активные уведомления: за ${sortedThresh.join(', ')} дн. до окончания срока`
+          : '🔕 Все пороги уведомлений отключены';
+      }
+
+      // Формируем список сработавших уведомлений
+      const feed = document.getElementById('notificationsFeed');
+      if (!feed) return;
+
+      const alertedItems = inventory
+        .map(item => {
+          const days = getDaysDiff(item.expiryDate);
+          return { item, days, alert: getItemAlertMatch(days) };
+        })
+        .filter(x => x.alert.matched)
+        .sort((a, b) => a.days - b.days);
+
+      document.getElementById('alertsCountLabel').innerText = alertedItems.length;
+
+      if (alertedItems.length === 0) {
+        feed.innerHTML = `
+          <div class="bg-white border border-slate-200 rounded-2xl p-6 text-center text-xs text-slate-400">
+            <i data-lucide="bell-off" class="w-7 h-7 mx-auto mb-1.5 text-emerald-500 opacity-60"></i>
+            <p>Сейчас нет товаров, попадающих под выбранные пороги (${sortedThresh.join(', ')} дн.).</p>
+          </div>
+        `;
+        lucide.createIcons();
+        return;
+      }
+
+      feed.innerHTML = alertedItems.map(({ item, days, alert }) => {
+        let boxStyle = 'border-amber-300 bg-amber-50/60';
+        let pillStyle = 'bg-amber-500 text-white';
+        if (days <= 0) {
+          boxStyle = 'border-rose-400 bg-rose-50/70';
+          pillStyle = 'bg-rose-600 text-white';
+        } else if (days <= 3) {
+          boxStyle = 'border-orange-300 bg-orange-50/70';
+          pillStyle = 'bg-orange-500 text-white';
+        } else if (days > 10) {
+          boxStyle = 'border-blue-200 bg-blue-50/50';
+          pillStyle = 'bg-blue-600 text-white';
+        }
+
+        return `
+          <div class="bg-white border ${boxStyle} rounded-xl p-3 shadow-sm flex items-center justify-between gap-2">
+            <div class="min-w-0 flex-1">
+              <div class="flex items-center gap-1.5 mb-0.5">
+                <span class="px-2 py-0.5 rounded text-[10px] font-bold ${pillStyle}">${alert.label}</span>
+                <span class="text-[10px] text-slate-500 font-medium">${item.category || '📦 Прочее'}</span>
+              </div>
+              <h4 class="font-bold text-xs text-slate-800 truncate">${item.title}</h4>
+              <p class="text-[11px] text-slate-600">Дата окончания: <strong>${formatDisplayDate(item.expiryDate)}</strong> (${item.quantity} шт.)</p>
+            </div>
+            <div class="flex items-center gap-1 shrink-0">
+              <button onclick="editItem(${item.id})" class="p-1.5 bg-white border border-slate-200 text-slate-600 hover:text-blue-600 rounded-lg" title="Редактировать">
+                <i data-lucide="pencil" class="w-4 h-4"></i>
+              </button>
+              <button onclick="markDone(${item.id})" class="p-1.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700" title="Проверено / Уценено">
+                <i data-lucide="check" class="w-4 h-4"></i>
+              </button>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      lucide.createIcons();
+    }
+
+    // Отправка системного браузерного Push-уведомления и проверка при входе
+    function triggerAutoNotifications(showToastEvenIfZero = false) {
+      const alerted = inventory.filter(i => getItemAlertMatch(getDaysDiff(i.expiryDate)).matched);
+      if (alerted.length === 0) {
+        if (showToastEvenIfZero) showToast('Все товары в пределах нормы!');
+        return;
+      }
+
+      const expiredCount = alerted.filter(i => getDaysDiff(i.expiryDate) <= 0).length;
+      const soonCount = alerted.length - expiredCount;
+
+      let summaryMsg = `🔔 Контроль сроков: `;
+      if (expiredCount > 0) summaryMsg += `🔴 Истек срок у ${expiredCount} поз.! `;
+      if (soonCount > 0) summaryMsg += `🟡 Подходит срок (по вашим порогам) у ${soonCount} поз.`;
+
+      showToast(summaryMsg, expiredCount > 0);
+
+      if ('Notification' in window && Notification.permission === 'granted') {
+        try {
+          new Notification('Expiry Guard — Контроль сроков', {
+            body: summaryMsg + '\nПервая позиция: ' + alerted[0].title + ' (до ' + formatDisplayDate(alerted[0].expiryDate) + ')'
+          });
+        } catch (e) {}
+      }
+    }
+
+    // Запуск камеры
+    async function startCamera() {
+      const video = document.getElementById('cameraVideo');
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } },
+          audio: false
+        });
+        videoStream = stream;
+        video.srcObject = stream;
+        document.getElementById('scanStatusText').innerText = 'Камера готова. Наведите на товар';
+      } catch (err) {
+        document.getElementById('scanStatusText').innerText = 'Разрешите доступ к камере в браузере';
+      }
+    }
+
+    document.getElementById('toggleCameraBtn').addEventListener('click', () => {
+      if (videoStream) {
+        videoStream.getTracks().forEach(t => t.stop());
+        videoStream = null;
+        document.getElementById('scanStatusText').innerText = 'Камера выключена';
+      } else {
+        startCamera();
+      }
+    });
+
+    let handsFreeAutoScan = true;
+    let isScanningNow = false;
+    let autoScanCooldownUntil = 0;
+    let soundEnabled = true;
+    let audioCtx = null;
+
+    // Звуковой сигнал кассового сканера + Виброотклик
+    // stepType: 'step1' (одиночный пик + вибро: название схвачено)
+    //           'saved' (двойной высокий пик + двойное вибро: дата схвачена и сохранено в базу)
+    function triggerFeedback(stepType) {
+      try {
+        if (navigator.vibrate) {
+          if (stepType === 'step1') {
+            navigator.vibrate(140);
+          } else {
+            navigator.vibrate([100, 60, 160]);
+          }
+        }
+      } catch (e) {}
+
+      if (!soundEnabled) return;
+      try {
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContextClass) return;
+        if (!audioCtx) audioCtx = new AudioContextClass();
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+
+        const now = audioCtx.currentTime;
+        if (stepType === 'step1') {
+          const osc = audioCtx.createOscillator();
+          const gain = audioCtx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(880, now);
+          gain.gain.setValueAtTime(0.18, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.11);
+          osc.connect(gain);
+          gain.connect(audioCtx.destination);
+          osc.start(now);
+          osc.stop(now + 0.11);
+        } else {
+          // Двойной аккорд успешного сохранения в базу
+          [1046.5, 1318.5].forEach((freq, idx) => {
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = 'triangle';
+            const start = now + idx * 0.12;
+            osc.frequency.setValueAtTime(freq, start);
+            gain.gain.setValueAtTime(0.22, start);
+            gain.gain.exponentialRampToValueAtTime(0.001, start + 0.12);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start(start);
+            osc.stop(start + 0.12);
+          });
+        }
+      } catch (e) {}
+    }
+
+    document.getElementById('toggleSoundBtn').addEventListener('click', () => {
+      soundEnabled = !soundEnabled;
+      const btn = document.getElementById('toggleSoundBtn');
+      btn.className = soundEnabled
+        ? 'bg-black/60 text-emerald-300 p-2.5 rounded-full hover:bg-black/80 transition backdrop-blur-sm'
+        : 'bg-black/60 text-slate-400 p-2.5 rounded-full hover:bg-black/80 transition backdrop-blur-sm';
+      showToast(soundEnabled ? '🔊 Звуковой пик сканера включен' : '🔇 Звук выключен (только вибро)');
+    });
+
+    // Переключатель непрерывного авто-сканирования без кнопок
+    const handsFreeBtn = document.getElementById('handsFreeToggleBtn');
+    handsFreeBtn.addEventListener('click', () => {
+      handsFreeAutoScan = !handsFreeAutoScan;
+      const dot = document.getElementById('autoPulseDot');
+      if (handsFreeAutoScan) {
+        handsFreeBtn.className = 'bg-emerald-600 text-white text-[11px] font-bold px-2.5 py-1.5 rounded-lg shadow-sm transition flex items-center gap-1';
+        handsFreeBtn.innerHTML = '<span>АВТО-КАМЕРА: ВКЛ</span>';
+        dot.className = 'w-2 h-2 rounded-full bg-emerald-400 animate-ping shrink-0';
+        showToast('🔄 Авто-захват без кнопок включен!');
+      } else {
+        handsFreeBtn.className = 'bg-slate-200 text-slate-700 text-[11px] font-bold px-2.5 py-1.5 rounded-lg shadow-sm transition flex items-center gap-1';
+        handsFreeBtn.innerHTML = '<span>АВТО-КАМЕРА: ПАУЗА</span>';
+        dot.className = 'w-2 h-2 rounded-full bg-slate-400 shrink-0';
+        showToast('Авто-захват на паузе (сканирование по кнопке)');
+      }
+    });
+
+    // Извлечение кадра в base64 JPEG (сжатие до 720p для молниеносного ответа в авто-режиме)
+    function captureBase64Image() {
+      const video = document.getElementById('cameraVideo');
+      const canvas = document.getElementById('captureCanvas');
+      if (!video || !video.videoWidth) return null;
+
+      const scale = Math.min(1, 720 / Math.max(video.videoWidth, video.videoHeight));
+      canvas.width = Math.round(video.videoWidth * scale);
+      canvas.height = Math.round(video.videoHeight * scale);
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.78);
+      return dataUrl.split(',')[1];
+    }
+
+    // Ядро сканирования кадра (isSilentAuto = true когда вызывается таймером без нажатия кнопки)
+    async function executeFrameScan(isSilentAuto = false) {
+      if (isScanningNow) return;
+      if (!geminiApiKey) {
+        if (!isSilentAuto) {
+          document.getElementById('apiKeyModal').classList.remove('hidden');
+          showToast('Сначала введите ключ Gemini API', true);
+        }
+        return;
+      }
+
+      const base64Data = captureBase64Image();
+      if (!base64Data) {
+        if (!isSilentAuto) showToast('Включите камеру перед сканированием', true);
+        return;
+      }
+
+      isScanningNow = true;
+      const overlay = document.getElementById('loadingOverlay');
+      const statusEl = document.getElementById('scanStatusText');
+
+      // В ручном режиме показываем полноэкранный спиннер, а в авто-режиме не перекрываем камеру!
+      if (!isSilentAuto) {
+        overlay.classList.remove('hidden');
+      } else {
+        statusEl.innerText = pendingScan.title
+          ? `⚡ Ищу ДАТУ для «${pendingScan.title}»...`
+          : '⚡ Авто-анализ кадра (Шаг 1: ищу название)...';
+      }
+
+      try {
+        // Если Шаг 1 (название) уже выполнен, даем нейросети узкую задачу: найти ТОЛЬКО дату годности!
+        const isWaitingForDateOnly = Boolean(pendingScan.title && !pendingScan.expiryDate);
+
+        const promptText = isWaitingForDateOnly
+          ? `
+Ты сканер сроков годности в супермаркете. Товар уже известен: "${pendingScan.title}".
+Сейчас сотрудник повернул упаковку стороной со штампом даты.
+Найди на упаковке, крышке или шве срок годности (годен до / exp / best before / valabil). Если указаны две даты (производство и окончание), бери более позднюю дату ОКОНЧАНИЯ срока годности и преобразуй в формат YYYY-MM-DD. Если даты в кадре нет — верни null.
+Ответь СТРОГО в формате JSON:
+{
+  "title": null,
+  "category": null,
+  "expiryDate": "YYYY-MM-DD или null",
+  "barcode": "штрихкод или null"
+}
+`
+          : `
+Ты опытный товаровед молдавской сети супермаркетов Linella.
+Внимательно посмотри на фото с камеры телефона.
+1. Если в кадре есть товар с читаемой этикеткой/логотипом — определи его точное наименование: бренд, название, вид, вес/объем (например: "Мёд липовый Bun Străbun 250г", "Шоколад Terravita Hazelnuts 100г", "Кефир JLC 2.5%"). Если в кадре пустой стол, пол, рука без этикетки или размытый фон — ОБЯЗАТЕЛЬНО верни null в поле title!
+2. Если в кадре также виден штамп даты / срока годности — верни дату окончания срока в формате YYYY-MM-DD. Иначе верни null.
+3. Если виден штрихкод — верни цифры. Иначе null.
+4. Определи категорию из списка: "🥛 Молочные продукты", "🍫 Сладости и шоколад", "🥩 Колбасы и мясо", "🧀 Сыры", "🍯 Бакалея и мёд", "🥖 Хлеб и выпечка", "🥫 Консервы и соусы", "🥤 Напитки и соки".
+
+Ответь ИСКЛЮЧИТЕЛЬНО в формате JSON без кавычек markdown:
+{
+  "title": "Точное название товара или null",
+  "category": "Категория товара или null",
+  "expiryDate": "YYYY-MM-DD или null",
+  "barcode": "штрихкод или null"
+}
+`;
+
+        const requestPayload = JSON.stringify({
+          contents: [{
+            parts: [
+              { text: promptText },
+              {
+                inline_data: {
+                  mime_type: 'image/jpeg',
+                  data: base64Data
+                }
+              }
+            ]
+          }],
+          generationConfig: {
+            temperature: 0.1
+          }
+        });
+
+        async function callModel(modelName) {
+          const cleanName = modelName.startsWith('models/') ? modelName : `models/${modelName}`;
+          if (!isSilentAuto) {
+            document.getElementById('loadingStatusText').innerText = `Анализ через ${cleanName.replace('models/', '')}...`;
+          }
+          return await fetch(`https://generativelanguage.googleapis.com/v1beta/${cleanName}:generateContent?key=${geminiApiKey}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: requestPayload
+          });
+        }
+
+        let candidateModels = [
+          'models/gemini-3.0-flash',
+          'models/gemini-3.8-flash',
+          'models/gemini-flash-latest'
+        ];
+
+        const savedModel = localStorage.getItem('expiry_guard_active_model');
+        if (savedModel && !savedModel.includes('2.5-flash') && !savedModel.includes('1.5-flash')) {
+          candidateModels = [savedModel, ...candidateModels.filter(m => m !== savedModel)];
+        } else {
+          try {
+            const modelsResp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${geminiApiKey}`);
+            if (modelsResp.ok) {
+              const modelsData = await modelsResp.json();
+              const supported = (modelsData.models || []).filter(m =>
+                m.supportedGenerationMethods &&
+                m.supportedGenerationMethods.includes('generateContent') &&
+                m.name.includes('gemini') &&
+                !m.name.includes('2.5-flash') &&
+                !m.name.includes('1.5-flash') &&
+                !m.name.includes('embedding') &&
+                !m.name.includes('aqa') &&
+                !m.name.includes('tts') &&
+                !m.name.includes('imagen')
+              );
+              const tier3 = supported.filter(m => m.name.includes('gemini-3') && m.name.includes('flash')).map(m => m.name);
+              const tierLatest = supported.filter(m => m.name.includes('flash-latest')).map(m => m.name);
+              const tierOtherFlash = supported.filter(m => m.name.includes('flash') && !tier3.includes(m.name) && !tierLatest.includes(m.name)).map(m => m.name);
+              candidateModels = [...new Set([...tier3, ...tierLatest, ...candidateModels, ...tierOtherFlash])];
+            }
+          } catch (e) {}
+        }
+
+        let response = null;
+        let activeModelName = '';
+        let lastErrorMsg = '';
+
+        for (let i = 0; i < candidateModels.length; i++) {
+          const modelToTry = candidateModels[i];
+          const res = await callModel(modelToTry);
+
+          if (res.ok) {
+            response = res;
+            activeModelName = modelToTry;
+            try { localStorage.setItem('expiry_guard_active_model', activeModelName); } catch (e) {}
+            break;
+          } else {
+            const errBody = await res.json().catch(() => ({}));
+            lastErrorMsg = errBody.error?.message || `HTTP ${res.status}`;
+
+            const suggestedMatch = lastErrorMsg.match(/use\s+(models\/gemini-[a-zA-Z0-9._-]+)/i);
+            if (suggestedMatch && suggestedMatch[1]) {
+              const suggestedModel = suggestedMatch[1];
+              const retryRes = await callModel(suggestedModel);
+              if (retryRes.ok) {
+                response = retryRes;
+                activeModelName = suggestedModel;
+                try { localStorage.setItem('expiry_guard_active_model', activeModelName); } catch (e) {}
+                break;
+              }
+            }
+          }
+        }
+
+        if (!response || !response.ok) {
+          try { localStorage.removeItem('expiry_guard_active_model'); } catch (e) {}
+          throw new Error(lastErrorMsg || 'Не удалось найти доступную модель Gemini.');
+        }
+
+        const data = await response.json();
+        const candidate = data.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (!candidate) {
+          throw new Error('Пустой ответ от нейросети Gemini');
+        }
+
+        let cleanJson = candidate.trim();
+        if (cleanJson.startsWith('```')) {
+          cleanJson = cleanJson.replace(/^```(json)?\s*/i, '').replace(/\s*```$/, '').trim();
+        }
+
+        const parsed = JSON.parse(cleanJson);
+        overlay.classList.add('hidden');
+        isScanningNow = false;
+
+        const rawTitle = (parsed.title && parsed.title !== 'null' && parsed.title.trim() !== '') ? parsed.title.trim() : '';
+        const rawDate = (parsed.expiryDate && parsed.expiryDate !== 'null' && parsed.expiryDate.trim() !== '') ? parsed.expiryDate.trim() : '';
+        const rawBarcode = (parsed.barcode && parsed.barcode !== 'null' && parsed.barcode.trim() !== '') ? String(parsed.barcode).trim() : '';
+        const rawCategory = (parsed.category && parsed.category !== 'null' && parsed.category.trim() !== '') ? parsed.category.trim() : '';
+
+        handleScanResult(rawBarcode, rawTitle, rawDate, `${activeModelName.replace('models/', '')} ✨`, rawCategory, isSilentAuto);
+
+      } catch (err) {
+        overlay.classList.add('hidden');
+        isScanningNow = false;
+        console.error('Gemini error:', err);
+
+        if (!isSilentAuto) {
+          document.getElementById('errorDetailsText').innerText = err.message || err;
+          document.getElementById('errorModal').classList.remove('hidden');
+          showToast('Ошибка обращения к Gemini API', true);
+        }
+      }
+    }
+
+    // Ручной запуск по кнопке (если нужно принудительно)
+    document.getElementById('aiScanBtn').addEventListener('click', () => {
+      executeFrameScan(false);
+    });
+
+    // Непрерывный фоновый цикл авто-сканирования (каждые 2.4 секунды проверяет кадр без нажатия кнопок)
+    setInterval(() => {
+      if (!handsFreeAutoScan) return;
+      if (isScanningNow) return;
+      if (!videoStream) return;
+      if (!geminiApiKey) return;
+      if (Date.now() < autoScanCooldownUntil) return;
+
+      // Проверяем, что открыта вкладка Сканера и не открыты модальные окна
+      const isScannerTabVisible = !document.getElementById('tabScanner').classList.contains('hidden');
+      const isConfirmOpen = !document.getElementById('confirmModal').classList.contains('hidden');
+      const isKeyOpen = !document.getElementById('apiKeyModal').classList.contains('hidden');
+      const isErrOpen = !document.getElementById('errorModal').classList.contains('hidden');
+
+      if (isScannerTabVisible && !isConfirmOpen && !isKeyOpen && !isErrOpen) {
+        executeFrameScan(true);
+      }
+    }, 2400);
+
+    // Настройки API Ключа
+    document.getElementById('apiKeySettingsBtn').addEventListener('click', () => {
+      document.getElementById('apiKeyModal').classList.remove('hidden');
+    });
+    document.getElementById('closeApiKeyModalBtn').addEventListener('click', () => {
+      document.getElementById('apiKeyModal').classList.add('hidden');
+    });
+    document.getElementById('saveApiKeyBtn').addEventListener('click', () => {
+      const key = document.getElementById('apiKeyInput').value.trim();
+      if (!key) {
+        showToast('Введите ключ API', true);
+        return;
+      }
+      geminiApiKey = key;
+      try {
+        localStorage.setItem('expiry_guard_gemini_key', key);
+        localStorage.removeItem('expiry_guard_active_model');
+      } catch (e) {}
+      document.getElementById('apiKeyModal').classList.add('hidden');
+      document.getElementById('keyStatusLabel').innerText = 'AI активен ✅';
+      showToast('✅ Ключ Gemini API сохранен!');
+    });
+
+    document.getElementById('closeErrorModalBtn').addEventListener('click', () => {
+      document.getElementById('errorModal').classList.add('hidden');
+    });
+    document.getElementById('fixKeyBtn').addEventListener('click', () => {
+      document.getElementById('errorModal').classList.add('hidden');
+      document.getElementById('apiKeyModal').classList.remove('hidden');
+    });
+
+    // Голосовой ввод (Web Speech API)
+    function startVoiceInput() {
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SpeechRecognition) {
+        showToast('Голосовой ввод не поддерживается', true);
+        return;
+      }
+
+      const rec = new SpeechRecognition();
+      rec.lang = 'ru-RU';
+      showToast('Слушаю... Назовите товар (например: «Мёд Бун Стрэбун»)');
+
+      rec.onresult = (event) => {
+        const spoken = event.results[0][0].transcript;
+        if (spoken) {
+          openConfirmModal('', spoken, '', 'Введено голосом 🎙️');
+        }
+      };
+      rec.start();
+    }
+
+    document.getElementById('quickVoiceBtn').addEventListener('click', startVoiceInput);
+    document.getElementById('modalMicBtn').addEventListener('click', () => {
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SpeechRecognition) return;
+      const rec = new SpeechRecognition();
+      rec.lang = 'ru-RU';
+      rec.onresult = (e) => {
+        document.getElementById('modalTitleInput').value = e.results[0][0].transcript;
+      };
+      rec.start();
+    });
+
+    // Переключатель авторежима
+    const autoModeBtn = document.getElementById('autoModeToggleBtn');
+    autoModeBtn.addEventListener('click', () => {
+      autoSaveMode = !autoSaveMode;
+      if (autoSaveMode) {
+        autoModeBtn.className = 'bg-emerald-600 text-white text-[11px] font-bold px-3 py-1.5 rounded-lg shadow-sm transition';
+        autoModeBtn.innerText = 'АВТО: ВКЛ';
+        showToast('⚡ Автосохранение включено');
+      } else {
+        autoModeBtn.className = 'bg-slate-200 text-slate-700 text-[11px] font-bold px-3 py-1.5 rounded-lg shadow-sm transition';
+        autoModeBtn.innerText = 'АВТО: ВЫКЛ';
+        showToast('Ручное подтверждение включено');
+      }
+    });
+
+    // Обновление видоискателя и плашки 2-этапного сканирования (Шаг 1 = Название, Шаг 2 = Дата)
+    function updatePendingBannerUI() {
+      const banner = document.getElementById('pendingScanBanner');
+      const btnText = document.getElementById('aiScanBtnText');
+      const statusEl = document.getElementById('scanStatusText');
+      const targetBox = document.getElementById('scannerTargetBox');
+      const stepBadge = document.getElementById('viewfinderStepBadge');
+      const midHint = document.getElementById('viewfinderMidHint');
+
+      if (!pendingScan.title && !pendingScan.expiryDate) {
+        banner.classList.add('hidden');
+        btnText.innerText = 'СКАНИРОВАТЬ ЭТОТ ТОВАР';
+        statusEl.innerText = 'Шаг 1: Наведите камеру на НАЗВАНИЕ товара';
+        targetBox.className = 'w-64 h-44 border-2 border-dashed border-emerald-400 rounded-xl scanner-target flex flex-col justify-between p-2 transition-colors duration-300';
+        stepBadge.className = 'text-[11px] text-white bg-emerald-700/90 px-2.5 py-1 rounded-lg self-center font-extrabold flex items-center gap-1.5 shadow';
+        stepBadge.innerHTML = '<span>ШАГ 1/2: ИЩУ НАЗВАНИЕ ТОВАРА</span>';
+        midHint.classList.add('hidden');
+        return;
+      }
+
+      banner.classList.remove('hidden');
+      if (pendingScan.title && !pendingScan.expiryDate) {
+        document.getElementById('pendingStepTitle').innerText = 'Шаг 1 готов (вибро)! Поверните на ДАТУ годности';
+        document.getElementById('pendingCapturedTitle').innerText = `📦 Схвачено: ${pendingScan.title}`;
+        document.getElementById('pendingCapturedDate').innerText = '📅 Ожидание Шага 2: наведите камеру на дату годности...';
+        btnText.innerText = 'ДОСКАНИРОВАТЬ ДАТУ (ШАГ 2/2)';
+        statusEl.innerText = 'Шаг 2: Наведите на ДАТУ годности (авто-захват)...';
+
+        targetBox.className = 'w-64 h-44 border-4 border-amber-400 rounded-xl flex flex-col justify-between p-2 transition-colors duration-300';
+        stepBadge.className = 'text-[11px] text-slate-950 bg-amber-400 px-2.5 py-1 rounded-lg self-center font-extrabold flex items-center gap-1.5 shadow';
+        stepBadge.innerHTML = '<span>ШАГ 2/2: ПОКАЖИТЕ ДАТУ ГОДНОСТИ</span>';
+        midHint.innerText = pendingScan.title;
+        midHint.classList.remove('hidden');
+      } else if (!pendingScan.title && pendingScan.expiryDate) {
+        document.getElementById('pendingStepTitle').innerText = 'Дата схвачена! Покажите НАЗВАНИЕ спереди';
+        document.getElementById('pendingCapturedTitle').innerText = '📦 Ожидание названия товара...';
+        document.getElementById('pendingCapturedDate').innerText = `📅 Срок: до ${formatDisplayDate(pendingScan.expiryDate)}`;
+        btnText.innerText = 'ДОСКАНИРОВАТЬ НАЗВАНИЕ (ШАГ 2/2)';
+        statusEl.innerText = 'Поверните товар лицевой этикеткой';
+      }
+    }
+
+    function resetPendingScan() {
+      pendingScan = { title: '', expiryDate: '', barcode: '', category: '' };
+      updatePendingBannerUI();
+    }
+
+    document.getElementById('cancelPendingBtn').addEventListener('click', () => {
+      resetPendingScan();
+      showToast('Двухэтапное сканирование сброшено');
+    });
+
+    // Быстрое завершение 2-го шага кнопками (+3д, +7д, +1мес)
+    document.querySelectorAll('.quick-finish-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const addDays = parseInt(btn.getAttribute('data-quick-days'));
+        const d = new Date();
+        d.setDate(d.getDate() + addDays);
+        const dateStr = d.toISOString().split('T')[0];
+        const finalTitle = pendingScan.title || 'Товар без названия';
+        const finalBarcode = pendingScan.barcode || '';
+        const finalCat = pendingScan.category || '';
+        resetPendingScan();
+        saveProductDirectly(finalBarcode, finalTitle, dateStr, 1, finalCat);
+      });
+    });
+
+    // Прямое автоматическое сохранение в базу без модального окна
+    function saveProductDirectly(barcode, title, expiryDate, quantity = 1, suggestedCategory = '') {
+      const category = inferCategoryFromTitle(title, suggestedCategory);
+      if (barcode && title) {
+        barcodeCache[barcode] = title;
+      }
+
+      const newItem = {
+        id: Date.now(),
+        barcode: barcode,
+        title: title,
+        category: category,
+        expiryDate: expiryDate,
+        quantity: quantity,
+        createdAt: new Date().toISOString()
+      };
+
+      inventory.unshift(newItem);
+      lastSavedItemId = newItem.id;
+      saveState();
+
+      // Показываем зеленую карточку последнего сохраненного товара
+      const lastCard = document.getElementById('lastScannedCard');
+      document.getElementById('lastScannedTitle').innerText = `${newItem.title}`;
+      document.getElementById('lastScannedSub').innerText = `${newItem.category} • До: ${formatDisplayDate(newItem.expiryDate)} (${newItem.quantity} шт.)`;
+
+      const days = getDaysDiff(newItem.expiryDate);
+      const badge = document.getElementById('lastScannedBadge');
+      if (days < 0) {
+        badge.className = 'px-2 py-0.5 rounded text-xs font-bold text-white bg-rose-600 shrink-0';
+        badge.innerText = 'Просрочен';
+      } else if (days <= 3) {
+        badge.className = 'px-2 py-0.5 rounded text-xs font-bold text-white bg-amber-500 shrink-0';
+        badge.innerText = `Уценка (${days}д)`;
+      } else {
+        badge.className = 'px-2 py-0.5 rounded text-xs font-bold text-white bg-emerald-600 shrink-0';
+        badge.innerText = `Ок (${days}д)`;
+      }
+      lastCard.classList.remove('hidden');
+
+      // Двойной звуковой пик + двойная вибрация: товар полностью сохранен в базу!
+      triggerFeedback('saved');
+      // Пауза 2.2 секунды перед следующим товаром, чтобы кассир спокойно убрал пачку
+      autoScanCooldownUntil = Date.now() + 2200;
+      showToast(`✅ СОХРАНЕНО В БАЗУ: ${newItem.title} (до ${formatDisplayDate(newItem.expiryDate)})`);
+    }
+
+    // Кнопки управления последней автосохраненной записью (+1 шт, Изменить, Отменить)
+    document.getElementById('lastItemPlusOneBtn').addEventListener('click', () => {
+      if (!lastSavedItemId) return;
+      const item = inventory.find(i => i.id === lastSavedItemId);
+      if (item) {
+        item.quantity += 1;
+        saveState();
+        document.getElementById('lastScannedSub').innerText = `Годен до: ${formatDisplayDate(item.expiryDate)} • Кол-во: ${item.quantity} шт.`;
+        showToast(`Количество увеличено: ${item.quantity} шт.`);
+      }
+    });
+
+    document.getElementById('lastItemEditBtn').addEventListener('click', () => {
+      if (!lastSavedItemId) return;
+      const item = inventory.find(i => i.id === lastSavedItemId);
+      if (item) {
+        // Удаляем автозапись и открываем её в модалке для ручной правки
+        inventory = inventory.filter(i => i.id !== lastSavedItemId);
+        saveState();
+        document.getElementById('lastScannedCard').classList.add('hidden');
+        openConfirmModal(item.barcode, item.title, item.expiryDate, 'Ручная правка');
+      }
+    });
+
+    document.getElementById('lastItemUndoBtn').addEventListener('click', () => {
+      if (!lastSavedItemId) return;
+      inventory = inventory.filter(i => i.id !== lastSavedItemId);
+      lastSavedItemId = null;
+      saveState();
+      document.getElementById('lastScannedCard').classList.add('hidden');
+      showToast('Последняя запись отменена');
+    });
+
+    // Умная конвейерная обработка: Шаг 1 (Название + вибро) -> Шаг 2 (Дата + вибро + сохранение в базу)
+    function handleScanResult(barcode, title, expiryDate, sourceNote, category = '', isSilentAuto = false) {
+      if (!title && barcode && barcodeCache[barcode]) {
+        title = barcodeCache[barcode];
+      }
+
+      const wasWaitingForTitle = !pendingScan.title;
+      const mergedTitle = pendingScan.title || title;
+      const mergedDate = pendingScan.expiryDate || expiryDate;
+      const mergedBarcode = pendingScan.barcode || barcode;
+      const mergedCategory = pendingScan.category || category;
+
+      editingItemId = null;
+
+      if (!autoSaveMode) {
+        if (!mergedTitle && !mergedDate) {
+          if (!isSilentAuto) showToast('Наведите камеру ближе к этикетке', true);
+          return;
+        }
+        resetPendingScan();
+        openConfirmModal(mergedBarcode, mergedTitle || 'Товар', mergedDate, sourceNote, mergedCategory);
+        return;
+      }
+
+      // СЦЕНАРИЙ 1: Оба параметра (Название + Дата) собраны -> АВТОСОХРАНЕНИЕ В БАЗУ!
+      if (mergedTitle && mergedDate) {
+        resetPendingScan();
+        saveProductDirectly(mergedBarcode, mergedTitle, mergedDate, 1, mergedCategory);
+        return;
+      }
+
+      // СЦЕНАРИЙ 2 (ШАГ 1 ПО УМОЛЧАНИЮ): Схвачено НАЗВАНИЕ товара -> Одиночный Виброотклик + переход к Шагу 2 (ожидание даты)
+      if (mergedTitle && !mergedDate) {
+        // Даем виброотклик только в момент первого захвата названия
+        if (wasWaitingForTitle) {
+          pendingScan.title = mergedTitle;
+          if (mergedBarcode) pendingScan.barcode = mergedBarcode;
+          if (mergedCategory) pendingScan.category = mergedCategory;
+          updatePendingBannerUI();
+          triggerFeedback('step1');
+          // Даем 1.4 секунды сотруднику спокойно перевернуть упаковку на сторону с датой
+          autoScanCooldownUntil = Date.now() + 1400;
+          showToast(`📳 Шаг 1 схвачен: «${mergedTitle}». Переверните на ДАТУ!`);
+        } else {
+          // Если сотрудник еще поворачивает коробку и в кадре снова лицевая сторона — просто ждем дату без лишних тостов
+          document.getElementById('scanStatusText').innerText = `Жду ДАТУ на обороте для «${pendingScan.title}»...`;
+        }
+        return;
+      }
+
+      // СЦЕНАРИЙ 3: Если сначала попалась дата без названия
+      if (!mergedTitle && mergedDate) {
+        if (!pendingScan.expiryDate) {
+          pendingScan.expiryDate = mergedDate;
+          if (mergedBarcode) pendingScan.barcode = mergedBarcode;
+          updatePendingBannerUI();
+          triggerFeedback('step1');
+          autoScanCooldownUntil = Date.now() + 1400;
+          showToast(`📳 Дата ${formatDisplayDate(mergedDate)} схвачена! Покажите лицевую сторону.`);
+        }
+        return;
+      }
+
+      // Если в кадре пока пусто (стол/стеллаж) и это авто-режим — тихо продолжаем искать Шаг 1
+      if (!isSilentAuto) {
+        showToast('В кадре не видно ни названия, ни даты. Наведите ближе!', true);
+      } else {
+        document.getElementById('scanStatusText').innerText = pendingScan.title
+          ? `🔄 Наведите на ДАТУ для «${pendingScan.title}»...`
+          : '🟢 Авто-поиск: покажите лицевую сторону товара...';
+      }
+    }
+
+    function populateModalCategorySelect(selectedCat) {
+      const sel = document.getElementById('modalCategorySelect');
+      if (!sel) return;
+      if (selectedCat && !categories.includes(selectedCat)) {
+        categories.unshift(selectedCat);
+      }
+      sel.innerHTML = categories.map(c => `<option value="${c}" ${c === selectedCat ? 'selected' : ''}>${c}</option>`).join('');
+      document.getElementById('modalCustomCategoryInput').value = '';
+    }
+
+    // Открытие окна подтверждения или редактирования
+    function openConfirmModal(barcode, title, expiryDate, sourceNote, category = '') {
+      document.getElementById('modalBarcodeTag').innerText = barcode ? `Штрихкод: ${barcode}` : 'Штрихкод: не найден';
+      document.getElementById('modalTitleInput').value = title;
+      document.getElementById('sourceConfidenceTag').innerHTML = `<i data-lucide="sparkles" class="w-3 h-3"></i> ${sourceNote || 'Gemini Vision'}`;
+
+      const autoCat = inferCategoryFromTitle(title, category);
+      populateModalCategorySelect(autoCat);
+
+      lucide.createIcons();
+
+      const dateInput = document.getElementById('modalDateInput');
+      if (expiryDate) {
+        dateInput.value = expiryDate;
+      } else {
+        const d = new Date();
+        d.setDate(d.getDate() + 30);
+        dateInput.value = d.toISOString().split('T')[0];
+      }
+
+      currentQty = 1;
+      document.getElementById('qtyVal').innerText = currentQty;
+      updateModalDaysTag();
+
+      document.getElementById('confirmModal').classList.remove('hidden');
+    }
+
+    function updateModalDaysTag() {
+      const val = document.getElementById('modalDateInput').value;
+      if (!val) return;
+      const days = getDaysDiff(val);
+      const tag = document.getElementById('modalDaysTag');
+      if (days < 0) {
+        tag.className = 'bg-rose-100 text-rose-800 text-xs font-bold px-3 py-2 rounded-xl border border-rose-200 whitespace-nowrap';
+        tag.innerText = 'Просрочен';
+      } else if (days <= 3) {
+        tag.className = 'bg-amber-100 text-amber-800 text-xs font-bold px-3 py-2 rounded-xl border border-amber-200 whitespace-nowrap';
+        tag.innerText = `Осталось: ${days} дн.`;
+      } else {
+        tag.className = 'bg-emerald-100 text-emerald-800 text-xs font-bold px-3 py-2 rounded-xl border border-emerald-200 whitespace-nowrap';
+        tag.innerText = `Осталось: ${days} дн.`;
+      }
+    }
+
+    document.getElementById('modalDateInput').addEventListener('change', updateModalDaysTag);
+
+    document.querySelectorAll('.date-chip').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const addDays = parseInt(btn.getAttribute('data-add-days'));
+        const d = new Date();
+        d.setDate(d.getDate() + addDays);
+        document.getElementById('modalDateInput').value = d.toISOString().split('T')[0];
+        updateModalDaysTag();
+      });
+    });
+
+    document.getElementById('qtyMinusBtn').addEventListener('click', () => {
+      if (currentQty > 1) {
+        currentQty--;
+        document.getElementById('qtyVal').innerText = currentQty;
+      }
+    });
+
+    document.getElementById('qtyPlusBtn').addEventListener('click', () => {
+      currentQty++;
+      document.getElementById('qtyVal').innerText = currentQty;
+    });
+
+    // Сохранение или обновление товара (режим создания и редактирования)
+    document.getElementById('saveItemBtn').addEventListener('click', () => {
+      const title = document.getElementById('modalTitleInput').value.trim();
+      const expiryDate = document.getElementById('modalDateInput').value;
+      const rawBarcode = document.getElementById('modalBarcodeTag').innerText.replace('Штрихкод: ', '').trim();
+      const barcode = rawBarcode.includes('не найден') ? '' : rawBarcode;
+
+      const customCat = document.getElementById('modalCustomCategoryInput').value.trim();
+      const selectedCat = document.getElementById('modalCategorySelect').value;
+      const finalCategory = customCat || selectedCat || inferCategoryFromTitle(title, '');
+
+      if (customCat && !categories.includes(customCat)) {
+        categories.unshift(customCat);
+      }
+
+      if (!title) {
+        showToast('Укажите название товара', true);
+        return;
+      }
+      if (!expiryDate) {
+        showToast('Укажите срок годности', true);
+        return;
+      }
+
+      if (barcode) {
+        barcodeCache[barcode] = title;
+      }
+
+      if (editingItemId) {
+        // Обновляем существующий товар
+        const existing = inventory.find(i => i.id === editingItemId);
+        if (existing) {
+          existing.title = title;
+          existing.expiryDate = expiryDate;
+          existing.category = finalCategory;
+          existing.quantity = currentQty;
+          if (barcode) existing.barcode = barcode;
+        }
+        editingItemId = null;
+        saveState();
+        document.getElementById('confirmModal').classList.add('hidden');
+        showToast(`✏️ Обновлено: ${title} (${finalCategory})`);
+        return;
+      }
+
+      const newItem = {
+        id: Date.now(),
+        barcode: barcode,
+        title: title,
+        category: finalCategory,
+        expiryDate: expiryDate,
+        quantity: currentQty,
+        createdAt: new Date().toISOString()
+      };
+
+      inventory.unshift(newItem);
+      lastSavedItemId = newItem.id;
+      saveState();
+
+      document.getElementById('confirmModal').classList.add('hidden');
+
+      const lastCard = document.getElementById('lastScannedCard');
+      document.getElementById('lastScannedTitle').innerText = newItem.title;
+      document.getElementById('lastScannedSub').innerText = `${newItem.category} • До: ${formatDisplayDate(newItem.expiryDate)} (${newItem.quantity} шт.)`;
+      
+      const days = getDaysDiff(newItem.expiryDate);
+      const badge = document.getElementById('lastScannedBadge');
+      if (days < 0) {
+        badge.className = 'px-2 py-0.5 rounded text-xs font-bold text-white bg-rose-600';
+        badge.innerText = 'Просрочен';
+      } else if (days <= 3) {
+        badge.className = 'px-2 py-0.5 rounded text-xs font-bold text-white bg-amber-500';
+        badge.innerText = `Уценка (${days}д)`;
+      } else {
+        badge.className = 'px-2 py-0.5 rounded text-xs font-bold text-white bg-emerald-600';
+        badge.innerText = `Ок (${days}д)`;
+      }
+      lastCard.classList.remove('hidden');
+
+      showToast(`✅ Сохранено в «${newItem.category}»: ${newItem.title}`);
+      if (navigator.vibrate) navigator.vibrate(80);
+    });
+
+    document.getElementById('closeModalBtn').addEventListener('click', () => {
+      editingItemId = null;
+      document.getElementById('confirmModal').classList.add('hidden');
+    });
+
+    // Навигация по 4 вкладкам
+    const tabScanner = document.getElementById('tabScanner');
+    const tabInventory = document.getElementById('tabInventory');
+    const tabCategories = document.getElementById('tabCategories');
+    const tabNotifications = document.getElementById('tabNotifications');
+
+    const navScanBtn = document.getElementById('navScanBtn');
+    const navInvBtn = document.getElementById('navInvBtn');
+    const navCatBtn = document.getElementById('navCatBtn');
+    const navNotifBtn = document.getElementById('navNotifBtn');
+
+    const tabStickers = document.getElementById('tabStickers');
+    const navStickerBtn = document.getElementById('navStickerBtn');
+
+    function switchTab(activeTab) {
+      [tabScanner, tabInventory, tabCategories, tabNotifications, tabStickers].forEach(t => t.classList.add('hidden'));
+      [navScanBtn, navInvBtn, navCatBtn, navNotifBtn, navStickerBtn].forEach(b => {
+        b.className = 'flex flex-col items-center text-slate-400 hover:text-slate-600 font-medium text-[11px] space-y-0.5 px-1.5';
+      });
+
+      if (activeTab === 'scan') {
+        tabScanner.classList.remove('hidden');
+        navScanBtn.className = 'flex flex-col items-center text-emerald-700 font-bold text-[11px] space-y-0.5 px-1.5';
+      } else if (activeTab === 'inv') {
+        tabInventory.classList.remove('hidden');
+        navInvBtn.className = 'flex flex-col items-center text-emerald-700 font-bold text-[11px] space-y-0.5 px-1.5';
+        renderInventory();
+      } else if (activeTab === 'cat') {
+        tabCategories.classList.remove('hidden');
+        navCatBtn.className = 'flex flex-col items-center text-emerald-700 font-bold text-[11px] space-y-0.5 px-1.5';
+        renderCategories();
+      } else if (activeTab === 'notif') {
+        tabNotifications.classList.remove('hidden');
+        navNotifBtn.className = 'flex flex-col items-center text-emerald-700 font-bold text-[11px] space-y-0.5 px-1.5';
+        renderNotifications();
+      } else if (activeTab === 'stickers') {
+        tabStickers.classList.remove('hidden');
+        navStickerBtn.className = 'flex flex-col items-center text-emerald-700 font-bold text-[11px] space-y-0.5 px-1.5';
+        showingLegendSheet = false;
+        renderStickers();
+      }
+    }
+
+    navScanBtn.addEventListener('click', () => switchTab('scan'));
+    navInvBtn.addEventListener('click', () => switchTab('inv'));
+    navCatBtn.addEventListener('click', () => switchTab('cat'));
+    navNotifBtn.addEventListener('click', () => switchTab('notif'));
+    navStickerBtn.addEventListener('click', () => switchTab('stickers'));
+
+    // Рендер генератора цветовых стикеров для полок
+    function renderStickers() {
+      const catSelect = document.getElementById('stickerCatFilter');
+      const zoneSelect = document.getElementById('stickerZoneFilter');
+      const grid = document.getElementById('stickersGrid');
+      const countBadge = document.getElementById('stickerCountBadge');
+      if (!grid || !catSelect || !zoneSelect) return;
+
+      // Обновляем список категорий в фильтре стикеров
+      const currentCatVal = catSelect.value || 'all';
+      const allCats = [...new Set([...categories, ...inventory.map(i => i.category || '📦 Прочее')])];
+      catSelect.innerHTML = `<option value="all">Все категории (${inventory.length})</option>` +
+        allCats.map(c => `<option value="${c}" ${c === currentCatVal ? 'selected' : ''}>${c}</option>`).join('');
+
+      if (showingLegendSheet) return;
+
+      document.getElementById('printSheetTitle').innerText = 'Лист цветовой маркировки полок (Linella)';
+      document.getElementById('printSheetSub').innerText = 'Разрежьте и наклейте стикер на край полки / ценникодержатель';
+
+      const selectedCat = catSelect.value;
+      const selectedZone = zoneSelect.value;
+
+      // Берем реальные товары из базы + добавленные шаблонные стикеры
+      let sourceItems = [...inventory, ...templateStickers];
+
+      let filtered = sourceItems.filter(item => {
+        const d = getDaysDiff(item.expiryDate);
+        const zone = getShelfColorZone(d);
+        if (selectedCat !== 'all' && (item.category || '📦 Прочее') !== selectedCat) return false;
+        if (selectedZone !== 'all' && zone.code !== selectedZone) return false;
+        return true;
+      });
+
+      countBadge.innerText = `${filtered.length} стик.`;
+
+      if (filtered.length === 0) {
+        grid.className = 'grid grid-cols-1 gap-2 pt-1';
+        grid.innerHTML = `
+          <div class="text-center py-8 text-slate-400 text-xs space-y-2">
+            <i data-lucide="printer" class="w-7 h-7 mx-auto text-emerald-600 opacity-50"></i>
+            <p>Для выбранного фильтра пока нет позиций.<br>Нажмите кнопки выше (<strong>«+6 Красных»</strong>, <strong>«+6 Желтых (1м)»</strong> или <strong>«+6 Зеленых (6м+)»</strong>), чтобы мгновенно сгенерировать лист готовых наклеек на полки!</p>
+          </div>
+        `;
+        lucide.createIcons();
+        return;
+      }
+
+      grid.className = 'grid grid-cols-2 gap-2.5 pt-1';
+      grid.innerHTML = filtered.map(item => {
+        const d = getDaysDiff(item.expiryDate);
+        const zone = getShelfColorZone(d);
+        // Дата предварительного контроля / уценки (за 3 дня для скоропорта или за 10 дней для месяца+)
+        const checkOffset = d > 20 ? 10 : 3;
+        const checkDateObj = new Date(item.expiryDate);
+        checkDateObj.setDate(checkDateObj.getDate() - checkOffset);
+        const checkDateStr = formatDisplayDate(checkDateObj.toISOString().split('T')[0]);
+
+        return `
+          <div class="border-2 ${zone.borderBox} rounded-xl overflow-hidden flex flex-col justify-between shadow-sm break-inside-avoid">
+            <!-- Цветная шапка стикера -->
+            <div class="${zone.bgHeader} px-2.5 py-1.5 flex items-center justify-between">
+              <span class="font-extrabold text-[10px] tracking-wide uppercase">${zone.shortLabel}</span>
+              <span class="text-[9px] font-bold opacity-90">${item.quantity} шт.</span>
+            </div>
+            <!-- Тело стикера -->
+            <div class="p-2.5 space-y-1 bg-white/90 flex-1 flex flex-col justify-between">
+              <div>
+                <div class="text-[9px] font-bold text-slate-400 uppercase truncate">${item.category || 'Отдел зала'}</div>
+                <div class="font-extrabold text-xs text-slate-900 leading-tight line-clamp-2">${item.title}</div>
+              </div>
+              <div class="pt-1.5 mt-1 border-t border-dashed border-slate-300 space-y-0.5">
+                <div class="flex items-center justify-between text-[10px]">
+                  <span class="text-slate-500 font-medium">ГОДЕН ДО:</span>
+                  <span class="font-extrabold text-xs text-slate-900">${formatDisplayDate(item.expiryDate)}</span>
+                </div>
+                <div class="flex items-center justify-between text-[9px] text-slate-600">
+                  <span>Контроль/Уценка:</span>
+                  <span class="font-bold">${checkDateStr}</span>
+                </div>
+              </div>
+            </div>
+            <!-- Подвал стикера с инструкцией кассиру -->
+            <div class="bg-slate-900 text-white px-2 py-1 text-[8px] font-bold text-center tracking-wider uppercase">
+              ${zone.actionText}
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      lucide.createIcons();
+    }
+
+    document.getElementById('stickerCatFilter').addEventListener('change', () => {
+      showingLegendSheet = false;
+      renderStickers();
+    });
+    document.getElementById('stickerZoneFilter').addEventListener('change', () => {
+      showingLegendSheet = false;
+      renderStickers();
+    });
+
+    // Генерация 6 шаблонных стикеров выбранного цвета в 1 клик
+    document.querySelectorAll('.tpl-sticker-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        showingLegendSheet = false;
+        const zone = btn.getAttribute('data-tpl-zone');
+        const selectedCat = document.getElementById('stickerCatFilter').value;
+        const catName = selectedCat === 'all' ? '📦 Маркировка полки' : selectedCat;
+
+        let addDays = 5;
+        let labelTitle = 'Партия: менее недели';
+        if (zone === 'yellow') {
+          addDays = 28;
+          labelTitle = 'Партия: остался 1 месяц';
+        } else if (zone === 'green') {
+          addDays = 200;
+          labelTitle = 'Партия: более полугода (6+ мес)';
+        }
+
+        const targetDate = new Date();
+        targetDate.setDate(targetDate.getDate() + addDays);
+        const dateStr = targetDate.toISOString().split('T')[0];
+
+        for (let i = 1; i <= 6; i++) {
+          templateStickers.push({
+            id: 'tpl_' + Date.now() + '_' + i,
+            title: `${catName.replace(/^[^\s]+\s/, '')} — ${labelTitle}`,
+            category: catName,
+            expiryDate: dateStr,
+            quantity: 1
+          });
+        }
+
+        document.getElementById('clearTemplateStickersBtn').classList.remove('hidden');
+        document.getElementById('stickerZoneFilter').value = 'all';
+        renderStickers();
+        showToast('Добавлено 6 цветных стикеров на лист печати!');
+      });
+    });
+
+    document.getElementById('clearTemplateStickersBtn').addEventListener('click', () => {
+      templateStickers = [];
+      showingLegendSheet = false;
+      document.getElementById('clearTemplateStickersBtn').classList.add('hidden');
+      renderStickers();
+      showToast('Шаблонные стикеры очищены');
+    });
+
+    // Кнопка генерации Памятки-светофора для кассиров (вешается на кассе и складе)
+    document.getElementById('printLegendBtn').addEventListener('click', () => {
+      showingLegendSheet = true;
+      document.getElementById('printSheetTitle').innerText = 'ПАМЯТКА КАССИРА И МЕРЧАНДАЙЗЕРА LINELLA';
+      document.getElementById('printSheetSub').innerText = 'Система цветового контроля сроков годности на полках («Светофор»)';
+      document.getElementById('stickerCountBadge').innerText = 'Инструкция';
+
+      const grid = document.getElementById('stickersGrid');
+      grid.className = 'grid grid-cols-1 gap-2.5 pt-1';
+      grid.innerHTML = `
+        <div class="border-2 border-rose-600 rounded-xl p-3 bg-rose-50/40 flex items-center gap-3">
+          <div class="w-12 h-12 rounded-xl bg-rose-600 text-white font-extrabold text-xs flex items-center justify-center shrink-0 text-center leading-tight">КРАСНЫЙ<br>&le; 7 дн.</div>
+          <div class="text-xs space-y-0.5">
+            <div class="font-extrabold text-rose-950 uppercase">🔴 Красный стикер на полке — Осталось менее 1 недели</div>
+            <p class="text-[11px] text-slate-700">Ежедневный контроль! Товар выставляется строго в первый ряд. При остатке 2–3 дня — клеится скидка уценки и переносится в промо-корзину.</p>
+          </div>
+        </div>
+        <div class="border-2 border-orange-500 rounded-xl p-3 bg-orange-50/40 flex items-center gap-3">
+          <div class="w-12 h-12 rounded-xl bg-orange-500 text-white font-extrabold text-xs flex items-center justify-center shrink-0 text-center leading-tight">ОРАНЖ<br>8–14 дн.</div>
+          <div class="text-xs space-y-0.5">
+            <div class="font-extrabold text-orange-950 uppercase">🟠 Оранжевый стикер — Осталось от 1 до 2 недель</div>
+            <p class="text-[11px] text-slate-700">Средний риск. При пополнении полки свежий товар ставить строго назад, партию с оранжевым стикером — сдвигать к покупателю (правило FEFO).</p>
+          </div>
+        </div>
+        <div class="border-2 border-amber-500 rounded-xl p-3 bg-amber-50/40 flex items-center gap-3">
+          <div class="w-12 h-12 rounded-xl bg-amber-400 text-slate-950 font-extrabold text-xs flex items-center justify-center shrink-0 text-center leading-tight">ЖЕЛТЫЙ<br>~1 мес.</div>
+          <div class="text-xs space-y-0.5">
+            <div class="font-extrabold text-amber-950 uppercase">🟡 Желтый стикер — Остался 1 месяц (15–30 дней)</div>
+            <p class="text-[11px] text-slate-700">Контрольная зона для бакалеи, шоколада, консервов и соусов. Проверить остаток партии за 10 дней до даты, указанной на стикере.</p>
+          </div>
+        </div>
+        <div class="border-2 border-sky-600 rounded-xl p-3 bg-sky-50/40 flex items-center gap-3">
+          <div class="w-12 h-12 rounded-xl bg-sky-600 text-white font-extrabold text-xs flex items-center justify-center shrink-0 text-center leading-tight">СИНИЙ<br>1–6 мес.</div>
+          <div class="text-xs space-y-0.5">
+            <div class="font-extrabold text-sky-950 uppercase">🔵 Синий стикер — Осталось от 1 до 6 месяцев</div>
+            <p class="text-[11px] text-slate-700">Стабильный запас. Плановая проверка раз в месяц. При остатке 30 дней переклеивается желтый стикер.</p>
+          </div>
+        </div>
+        <div class="border-2 border-emerald-600 rounded-xl p-3 bg-emerald-50/40 flex items-center gap-3">
+          <div class="w-12 h-12 rounded-xl bg-emerald-600 text-white font-extrabold text-xs flex items-center justify-center shrink-0 text-center leading-tight">ЗЕЛЕНЫЙ<br>&gt; 6 мес.</div>
+          <div class="text-xs space-y-0.5">
+            <div class="font-extrabold text-emerald-950 uppercase">🟢 Зеленый стикер — Более полугода (6+ месяцев)</div>
+            <p class="text-[11px] text-slate-700">Зеленая безопасная зона! Кассиры не тратят время на чтение дат на этих полках во время смены.</p>
+          </div>
+        </div>
+      `;
+      showToast('Памятка сформирована! Нажмите «Распечатать»');
+    });
+
+    // Печать листа стикеров или сохранение в PDF
+    document.getElementById('printStickersBtn').addEventListener('click', () => {
+      window.print();
+    });
+
+    // Добавление новой категории во вкладке Категории
+    document.getElementById('addCategoryBtn').addEventListener('click', () => {
+      document.getElementById('newCategoryBox').classList.toggle('hidden');
+      document.getElementById('newCategoryInput').focus();
+    });
+
+    document.getElementById('saveNewCategoryBtn').addEventListener('click', () => {
+      const val = document.getElementById('newCategoryInput').value.trim();
+      if (!val) return;
+      if (!categories.includes(val)) {
+        categories.unshift(val);
+        saveState();
+      }
+      document.getElementById('newCategoryInput').value = '';
+      document.getElementById('newCategoryBox').classList.add('hidden');
+      showToast(`Добавлена категория: ${val}`);
+    });
+
+    // Управление порогами уведомлений (2, 3, 5, 10, 30 дней)
+    document.querySelectorAll('.thresh-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const val = parseInt(btn.getAttribute('data-thresh'));
+        if (alertThresholds.includes(val)) {
+          alertThresholds = alertThresholds.filter(t => t !== val);
+        } else {
+          alertThresholds.push(val);
+        }
+        saveState();
+      });
+    });
+
+    document.getElementById('addCustomThresholdBtn').addEventListener('click', () => {
+      const val = parseInt(document.getElementById('customThresholdInput').value);
+      if (!val || val < 1 || val > 365) {
+        showToast('Введите число дней от 1 до 365', true);
+        return;
+      }
+      if (!alertThresholds.includes(val)) {
+        alertThresholds.push(val);
+        saveState();
+      }
+      document.getElementById('customThresholdInput').value = '';
+      showToast(`Добавлено уведомление за ${val} дн. до срока`);
+    });
+
+    document.getElementById('enablePushBtn').addEventListener('click', async () => {
+      if ('Notification' in window) {
+        const perm = await Notification.requestPermission();
+        if (perm === 'granted') {
+          triggerAutoNotifications(true);
+        } else {
+          triggerAutoNotifications(true);
+        }
+      } else {
+        triggerAutoNotifications(true);
+      }
+    });
+
+    document.getElementById('refreshAlertsBtn').addEventListener('click', () => {
+      renderNotifications();
+      triggerAutoNotifications(true);
+    });
+
+    document.querySelectorAll('.filter-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.filter-btn').forEach(b => {
+          b.className = 'filter-btn bg-white text-slate-600 border border-slate-200 px-3 py-1.5 rounded-lg font-medium whitespace-nowrap shadow-sm';
+        });
+        btn.className = 'filter-btn bg-emerald-800 text-white px-3 py-1.5 rounded-lg font-medium whitespace-nowrap shadow-sm';
+        currentFilter = btn.getAttribute('data-filter');
+        renderInventory();
+      });
+    });
+
+    document.getElementById('searchInput').addEventListener('input', renderInventory);
+
+    document.getElementById('clearInventoryBtn').addEventListener('click', () => {
+      document.getElementById('confirmClearModal').classList.remove('hidden');
+    });
+
+    document.getElementById('cancelClearBtn').addEventListener('click', () => {
+      document.getElementById('confirmClearModal').classList.add('hidden');
+    });
+
+    document.getElementById('executeClearBtn').addEventListener('click', () => {
+      inventory = [];
+      saveState();
+      document.getElementById('confirmClearModal').classList.add('hidden');
+      showToast('Журнал очищен');
+    });
+
+    document.getElementById('shareReportBtn').addEventListener('click', async () => {
+      if (inventory.length === 0) {
+        showToast('Журнал пуст', true);
+        return;
+      }
+
+      let text = '📋 ОТЧЕТ СРОКОВ ГОДНОСТИ:\n';
+      text += `Linella • ${new Date().toLocaleDateString('ru-RU')}\n\n`;
+
+      inventory.forEach(item => {
+        const d = getDaysDiff(item.expiryDate);
+        let status = d < 0 ? '🔴 ПРОСРОЧЕНО' : (d <= 3 ? `🟡 УЦЕНКА (${d}д)` : `🟢 ${d}д`);
+        text += `${status}: ${item.title} — до ${formatDisplayDate(item.expiryDate)} (${item.quantity} шт.)\n`;
+      });
+
+      if (navigator.share) {
+        try {
+          await navigator.share({ title: 'Сроки годности', text: text });
+          return;
+        } catch (e) {}
+      }
+
+      try {
+        await navigator.clipboard.writeText(text);
+        showToast('Отчет скопирован в буфер обмена');
+      } catch (err) {}
+    });
+
+    startCamera();
+    renderInventory();
+    renderCategories();
+    renderNotifications();
+    renderStickers();
+    updateBadgeCounts();
+    setTimeout(() => triggerAutoNotifications(false), 1200);
+  </script>
+</body>
+</html>
